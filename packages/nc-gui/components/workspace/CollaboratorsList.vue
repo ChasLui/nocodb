@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import type { WorkspaceUserRoles } from 'nocodb-sdk'
-import { OrderedWorkspaceRoles, WorkspaceUserRoles as WorkspaceUserRolesEnum } from 'nocodb-sdk'
+import type { WorkspaceUserRoles as WorkspaceUserRolesEnum } from 'nocodb-sdk'
+import { OrderedWorkspaceRoles } from 'nocodb-sdk'
 
 const props = defineProps<{
   workspaceId?: string

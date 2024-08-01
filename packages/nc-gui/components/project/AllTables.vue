@@ -17,6 +17,8 @@ const { $e } = useNuxtApp()
 
 const isImportModalOpen = ref(false)
 
+const syncDataModalOpen = ref(false)
+
 const defaultBase = computed(() => {
   return openedProject.value?.sources?.[0]
 })
@@ -84,7 +86,7 @@ const onCreateBaseClick = () => {
         'pointer-events-none': base?.isLoading,
       }"
     >
-      <NcTooltip v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })" placement="bottom" disabled>
+      <NcTooltip v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })" placement="bottom" disabled class="flex">
         <div class="flex flex-col gap-2 pb-1">
           <!-- Todo: add tooltip -->
         </div>
@@ -100,7 +102,7 @@ const onCreateBaseClick = () => {
         </div>
       </NcTooltip>
 
-      <NcTooltip v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })" placement="bottom">
+      <NcTooltip v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })" placement="bottom" class="flex">
         <template #title>
           <div class="flex flex-col gap-2 pb-1">
             <div class="text-xs">
@@ -125,7 +127,7 @@ const onCreateBaseClick = () => {
           <div class="label">{{ $t('activity.import') }} {{ $t('general.data') }}</div>
         </div>
       </NcTooltip>
-      <NcTooltip v-if="isUIAllowed('sourceCreate')" placement="bottom">
+      <NcTooltip v-if="isUIAllowed('sourceCreate')" placement="bottom" class="flex">
         <template #title>
           <div v-if="isDataSourceLimitReached">
             {{ $t('tooltip.reachedSourceLimit') }}
@@ -156,7 +158,7 @@ const onCreateBaseClick = () => {
           <div class="label">{{ $t('labels.connectDataSource') }}</div>
         </div>
       </NcTooltip>
-      <NcTooltip placement="bottom" disabled>
+      <NcTooltip v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })" placement="bottom" disabled class="flex">
         <template #title>
           <div class="flex flex-col gap-2 pb-1">
             <!-- Todo: add tooltip -->
@@ -170,7 +172,7 @@ const onCreateBaseClick = () => {
           :class="{
             disabled: isDataSourceLimitReached,
           }"
-          @click="onCreateBaseClick"
+          @click="syncDataModalOpen = true"
         >
           <GeneralIcon icon="refresh" class="!text-blue-700" />
           <div class="label capitalize">{{ $t('labels.syncData') }}</div>
@@ -242,6 +244,7 @@ const onCreateBaseClick = () => {
     </div>
 
     <ProjectImportModal v-if="defaultBase" v-model:visible="isImportModalOpen" :source="defaultBase" />
+    <ProjectSyncDataModal v-if="defaultBase" v-model:open="syncDataModalOpen" />
     <LazyDashboardSettingsDataSourcesCreateBase v-if="isNewBaseModalOpen" v-model:open="isNewBaseModalOpen" is-modal />
   </div>
 </template>

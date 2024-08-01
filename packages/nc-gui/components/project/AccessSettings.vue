@@ -228,7 +228,7 @@ watch(currentBase, () => {
       <GeneralLoader size="xlarge" />
     </div>
     <template v-else>
-      <div class="w-full flex flex-row justify-between items-center max-w-350 mt-6.5 mb-2 pr-0.25">
+      <div class="w-full flex flex-row justify-between items-center max-w-350 mt-6 mb-2 pr-0.25">
         <a-input v-model:value="userSearchText" :placeholder="$t('title.searchMembers')" class="!max-w-90 !rounded-md mr-4">
           <template #prefix>
             <PhMagnifyingGlassBold class="!h-3.5 text-gray-500" />

@@ -228,10 +228,10 @@ watch(currentBase, () => {
       <GeneralLoader size="xlarge" />
     </div>
     <template v-else>
-      <div class="w-full flex flex-row justify-between items-center max-w-350 mt-6 mb-2 pr-0.25">
-        <a-input v-model:value="userSearchText" :placeholder="$t('title.searchMembers')" class="!max-w-90 !rounded-md mr-4">
+      <div class="w-full flex flex-row justify-between items-center max-w-350 mt-6 mb-2 px-1">
+        <a-input v-model:value="userSearchText"  type="text" :placeholder="$t('title.searchMembers')" class="!max-w-90 nc-input-sm"  allow-clear>
           <template #prefix>
-            <PhMagnifyingGlassBold class="!h-3.5 text-gray-500" />
+            <GeneralIcon icon="search" class="mr-2 h-4 w-4 text-gray-500" />
           </template>
         </a-input>
 

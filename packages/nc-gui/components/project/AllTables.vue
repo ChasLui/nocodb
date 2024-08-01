@@ -1,12 +1,15 @@
 <script lang="ts" setup>
 import type { SourceType, TableType } from 'nocodb-sdk'
 import dayjs from 'dayjs'
+import NcTooltip from '~/components/nc/Tooltip.vue'
 
 const { activeTables } = storeToRefs(useTablesStore())
 const { openTable } = useTablesStore()
-const { openedProject } = storeToRefs(useBases())
+const { openedProject, isDataSourceLimitReached } = storeToRefs(useBases())
 
 const { base } = storeToRefs(useBase())
+
+const isNewBaseModalOpen = ref(false)
 
 const { isUIAllowed } = useRoles()
 
@@ -65,6 +68,12 @@ function openTableCreateDialog(baseIndex?: number | undefined) {
     close(1000)
   }
 }
+
+const onCreateBaseClick = () => {
+  if (isDataSourceLimitReached.value) return
+
+  isNewBaseModalOpen.value = true
+}
 </script>
 
 <template>
@@ -83,7 +92,7 @@ function openTableCreateDialog(baseIndex?: number | undefined) {
         @click="openTableCreateDialog()"
       >
         <GeneralIcon icon="addOutlineBox" />
-        <div class="label">{{ $t('general.new') }} {{ $t('objects.table') }}</div>
+        <div class="label">{{ $t('general.create') }} {{ $t('general.empty') }} {{ $t('objects.table') }}</div>
       </div>
       <div
         v-if="isUIAllowed('tableCreate', { source: base?.sources?.[0] })"
@@ -93,10 +102,10 @@ function openTableCreateDialog(baseIndex?: number | undefined) {
         data-testid="proj-view-btn__import-data"
         @click="isImportModalOpen = true"
       >
-        <GeneralIcon icon="download" />
+        <GeneralIcon icon="download" class="!text-orange-700"/>
         <div class="label">{{ $t('activity.import') }} {{ $t('general.data') }}</div>
       </div>
-      <!--      <component :is="isDataSourceLimitReached ? NcTooltip : 'div'" v-if="isUIAllowed('sourceCreate')">
+      <component :is="isDataSourceLimitReached ? NcTooltip : 'div'" v-if="isUIAllowed('sourceCreate')">
         <template #title>
           <div>
             {{ $t('tooltip.reachedSourceLimit') }}
@@ -112,10 +121,10 @@ function openTableCreateDialog(baseIndex?: number | undefined) {
           }"
           @click="onCreateBaseClick"
         >
-          <GeneralIcon icon="dataSource" />
+          <GeneralIcon icon="circle"  class="!text-green-700"/>
           <div class="label">{{ $t('labels.connectDataSource') }}</div>
         </div>
-      </component> -->
+      </component>
     </div>
     <div
       v-if="base?.isLoading"
@@ -182,20 +191,20 @@ function openTableCreateDialog(baseIndex?: number | undefined) {
     </div>
 
     <ProjectImportModal v-if="defaultBase" v-model:visible="isImportModalOpen" :source="defaultBase" />
-    <!--    <LazyDashboardSettingsDataSourcesCreateBase v-model:open="isNewBaseModalOpen" /> -->
+    <LazyDashboardSettingsDataSourcesCreateBase v-model:open="isNewBaseModalOpen" is-modal/>
   </div>
 </template>
 
 <style lang="scss" scoped>
 .nc-base-view-all-table-btn {
-  @apply flex flex-col gap-y-6 p-4 bg-gray-100 rounded-xl w-56 cursor-pointer text-gray-600 hover:(bg-gray-200 text-black);
+  @apply flex flex-col gap-y-3 p-3 bg-gray-100 rounded-xl min-w-[168px] cursor-pointer text-gray-600 hover:(bg-gray-200 text-black);
 
   .nc-icon {
-    @apply h-10 w-10;
+    @apply h-6 w-6;
   }
 
   .label {
-    @apply text-base font-medium;
+    @apply text-sm font-bold;
   }
 }
 

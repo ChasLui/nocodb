@@ -6,9 +6,18 @@ import { Upload } from '@aws-sdk/lib-storage';
 import axios from 'axios';
 import { useAgent } from 'request-filtering-agent';
 import type { S3ClientConfig } from '@aws-sdk/client-s3';
-import type { IStorageAdapterV2, XcFile } from 'nc-plugin';
-import type { Readable } from 'stream';
-import { generateTempFilePath, waitForStreamClose } from '~/utils/pluginUtils';
+import type { IStorageAdapterV2 } from 'nc-plugin';
+import GenericS3 from '~/plugins/GenericS3/GenericS3';
+
+interface S3Input {
+  bucket: string;
+  region: string;
+  access_key: string;
+  access_secret: string;
+  endpoint?: string;
+  acl?: string;
+  force_path_style?: boolean;
+}
 
 export default class S3 implements IStorageAdapterV2 {
   private s3Client: S3Client;
@@ -164,6 +173,7 @@ export default class S3 implements IStorageAdapterV2 {
         accessKeyId: this.input.access_key,
         secretAccessKey: this.input.access_secret,
       },
+      forcePathStyle: this.input.force_path_style ?? false,
     };
 
     if (this.input.endpoint) {

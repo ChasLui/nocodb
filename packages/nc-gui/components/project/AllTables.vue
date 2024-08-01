@@ -102,7 +102,7 @@ const onCreateBaseClick = () => {
         data-testid="proj-view-btn__import-data"
         @click="isImportModalOpen = true"
       >
-        <GeneralIcon icon="download" class="!text-orange-700"/>
+        <GeneralIcon icon="download" class="!text-orange-700" />
         <div class="label">{{ $t('activity.import') }} {{ $t('general.data') }}</div>
       </div>
       <component :is="isDataSourceLimitReached ? NcTooltip : 'div'" v-if="isUIAllowed('sourceCreate')">
@@ -121,7 +121,7 @@ const onCreateBaseClick = () => {
           }"
           @click="onCreateBaseClick"
         >
-          <GeneralIcon icon="circle"  class="!text-green-700"/>
+          <GeneralIcon icon="circle" class="!text-green-700" />
           <div class="label">{{ $t('labels.connectDataSource') }}</div>
         </div>
       </component>
@@ -191,7 +191,7 @@ const onCreateBaseClick = () => {
     </div>
 
     <ProjectImportModal v-if="defaultBase" v-model:visible="isImportModalOpen" :source="defaultBase" />
-    <LazyDashboardSettingsDataSourcesCreateBase v-model:open="isNewBaseModalOpen" is-modal/>
+    <LazyDashboardSettingsDataSourcesCreateBase v-model:open="isNewBaseModalOpen" is-modal />
   </div>
 </template>
 

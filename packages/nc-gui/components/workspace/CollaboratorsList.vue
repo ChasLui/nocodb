@@ -73,7 +73,7 @@ const selectAll = computed({
 
 const updateCollaborator = async (collab: any, roles: WorkspaceUserRoles) => {
   if (!currentWorkspace.value || !currentWorkspace.value.id) return
-  console.log(WorkspaceUserRoles.OWNER)
+
   try {
     await _updateCollaborator(collab.id, roles, currentWorkspace.value.id)
     message.success('Successfully updated user role')

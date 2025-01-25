@@ -1,5 +1,6 @@
 import UITypes from '../UITypes';
 import { IDType } from './index';
+import { ColumnType } from '~/lib';
 
 const dbTypes = [
   'NUMBER',
@@ -175,6 +176,30 @@ export class SnowflakeUi {
         dtxs: '',
         altered: 1,
         uidt: UITypes.LastModifiedBy,
+        uip: '',
+        uicn: '',
+        system: true,
+      },
+      {
+        column_name: 'nc_order',
+        title: 'nc_order',
+        dt: 'number',
+        dtx: 'specificType',
+        ct: 'number(38,18)',
+        nrqd: true,
+        rqd: false,
+        ck: false,
+        pk: false,
+        un: false,
+        ai: false,
+        cdf: null,
+        clen: null,
+        np: 38,
+        ns: 18,
+        dtxp: '38,18',
+        dtxs: '',
+        altered: 1,
+        uidt: UITypes.Order,
         uip: '',
         uicn: '',
         system: true,
@@ -983,6 +1008,7 @@ export class SnowflakeUi {
         ];
 
       case 'Formula':
+      case 'Button':
         return ['TEXT', 'VARCHAR'];
 
       case 'Rollup':
@@ -1016,7 +1042,6 @@ export class SnowflakeUi {
       case 'Geometry':
         return ['TEXT'];
 
-      case 'Button':
       default:
         return dbTypes;
     }
@@ -1033,6 +1058,10 @@ export class SnowflakeUi {
       'COUNT',
       'DATESTR',
     ];
+  }
+
+  static getCurrentDateDefault(_col: Partial<ColumnType>) {
+    return null;
   }
 
   static isEqual(dataType1: string, dataType2: string) {

@@ -13,9 +13,11 @@ const emit = defineEmits(['update:modelValue'])
 
 const { isMysql } = useBase()
 
-const { showNull, isMobileMode } = useGlobal()
+const { showNull } = useGlobal()
 
 const readOnly = inject(ReadonlyInj, ref(false))
+
+const rawReadOnly = inject(RawReadonlyInj, ref(false))
 
 const active = inject(ActiveCellInj, ref(false))
 
@@ -69,24 +71,72 @@ const localState = computed({
   },
   set(val?: dayjs.Dayjs) {
     isClearedInputMode.value = false
-    if (!val) {
-      emit('update:modelValue', null)
+
+    saveChanges(val)
+  },
+})
+
+const savingValue = ref()
+
+function saveChanges(val?: dayjs.Dayjs) {
+  if (!val) {
+    if (savingValue.value === val) {
       return
     }
 
-    if (val.isValid()) {
-      const time = val.format('HH:mm')
-      const date = dayjs(`1999-01-01 ${time}:00`)
-      emit('update:modelValue', date.format(dateFormat))
+    savingValue.value = null
+
+    emit('update:modelValue', null)
+    return
+  }
+
+  if (val.isValid()) {
+    const time = val.format('HH:mm')
+    const date = dayjs(`1999-01-01 ${time}:00`)
+
+    const formattedValue = date.format(dateFormat)
+
+    if (savingValue.value === formattedValue) {
+      return
     }
-  },
-})
+
+    savingValue.value = formattedValue
+    emit('update:modelValue', date.format(dateFormat))
+  }
+}
 
 watchEffect(() => {
   if (localState.value) {
     tempDate.value = localState.value
   }
 })
+
+const handleUpdateValue = (e: Event, save = false) => {
+  let targetValue = (e.target as HTMLInputElement).value
+
+  if (!targetValue) {
+    tempDate.value = undefined
+    return
+  }
+
+  targetValue = parseProp(column.value.meta).is12hrFormat
+    ? targetValue
+        .trim()
+        .toUpperCase()
+        .replace(/(AM|PM)$/, ' $1')
+        .replace(/\s+/g, ' ')
+    : targetValue.trim()
+
+  const parsedDate = dayjs(targetValue, parseProp(column.value.meta).is12hrFormat ? 'hh:mm A' : 'HH:mm')
+
+  if (parsedDate.isValid()) {
+    tempDate.value = dayjs(`${dayjs().format('YYYY-MM-DD')} ${parsedDate.format('HH:mm')}`)
+
+    if (save) {
+      saveChanges(tempDate.value)
+    }
+  }
+}
 
 const randomClass = `picker_${Math.floor(Math.random() * 99999)}`
 
@@ -97,6 +147,8 @@ onClickOutside(datePickerRef, (e) => {
 })
 
 const onBlur = (e) => {
+  handleUpdateValue(e, true)
+
   if (
     (e?.relatedTarget as HTMLElement)?.closest(`.${randomClass}, .nc-${randomClass}`) ||
     (e?.target as HTMLElement)?.closest(`.${randomClass}, .nc-${randomClass}`)
@@ -225,56 +277,26 @@ useEventListener(document, 'keydown', (e: KeyboardEvent) => {
   // To prevent event listener on non active cell
   if (!active.value) return
 
-  if (
-    e.altKey ||
-    e.ctrlKey ||
-    e.shiftKey ||
-    e.metaKey ||
-    !isGrid.value ||
-    isExpandedForm.value ||
-    isEditColumn.value ||
-    isExpandedFormOpenExist()
-  ) {
+  if (e.altKey || e.shiftKey || !isGrid.value || isExpandedForm.value || isEditColumn.value || isExpandedFormOpenExist()) {
     return
   }
 
-  switch (e.key) {
-    case ';':
-      localState.value = dayjs(new Date())
-      e.preventDefault()
-      break
-    default:
-      if (!isOpen.value && datePickerRef.value && /^[0-9a-z]$/i.test(e.key)) {
-        isClearedInputMode.value = true
-        datePickerRef.value.focus()
-        editable.value = true
-        open.value = true
+  if (e.metaKey || e.ctrlKey) {
+    if (e.key === ';') {
+      if (isGrid.value && !isExpandedForm.value && !isEditColumn.value) {
+        localState.value = dayjs(new Date())
+        e.preventDefault()
       }
+    } else return
+  }
+
+  if (!isOpen.value && datePickerRef.value && /^[0-9a-z]$/i.test(e.key)) {
+    isClearedInputMode.value = true
+    datePickerRef.value.focus()
+    editable.value = true
+    open.value = true
   }
 })
-
-const handleUpdateValue = (e: Event) => {
-  let targetValue = (e.target as HTMLInputElement).value
-
-  if (!targetValue) {
-    tempDate.value = undefined
-    return
-  }
-
-  targetValue = parseProp(column.value.meta).is12hrFormat
-    ? targetValue
-        .trim()
-        .toUpperCase()
-        .replace(/(AM|PM)$/, ' $1')
-        .replace(/\s+/g, ' ')
-    : targetValue.trim()
-
-  const parsedDate = dayjs(targetValue, parseProp(column.value.meta).is12hrFormat ? 'hh:mm A' : 'HH:mm')
-
-  if (parsedDate.isValid()) {
-    tempDate.value = dayjs(`${dayjs().format('YYYY-MM-DD')} ${parsedDate.format('HH:mm')}`)
-  }
-}
 
 function handleSelectTime(value?: dayjs.Dayjs) {
   if (!value) {
@@ -314,12 +336,13 @@ const cellValue = computed(() => localState.value?.format(parseProp(column.value
       class="nc-time-picker h-full flex items-center justify-between ant-picker-input relative"
     >
       <input
+        v-if="!rawReadOnly"
         ref="datePickerRef"
         type="text"
         :value="cellValue"
         :placeholder="placeholder"
         class="nc-time-input border-none outline-none !text-current bg-transparent !focus:(border-none outline-none ring-transparent)"
-        :readonly="readOnly || !!isMobileMode"
+        :readonly="readOnly"
         @blur="onBlur"
         @focus="onFocus"
         @keydown="handleKeydown($event, isOpen)"
@@ -328,6 +351,9 @@ const cellValue = computed(() => localState.value?.format(parseProp(column.value
         @click="clickHandler"
         @input="handleUpdateValue"
       />
+      <span v-else>
+        {{ cellValue }}
+      </span>
 
       <GeneralIcon
         v-if="localState && !readOnly"

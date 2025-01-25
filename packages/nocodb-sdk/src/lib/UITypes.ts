@@ -1,6 +1,7 @@
-import { ColumnReqType, ColumnType, TableType } from './Api';
+import { ButtonActionsType, ColumnReqType, ColumnType, TableType } from './Api';
 import { FormulaDataTypes } from './formulaHelpers';
-import { RelationTypes } from '~/lib/globals';
+import { LongTextAiMetaProp, RelationTypes } from '~/lib/globals';
+import { parseProp } from './helperFunctions';
 
 enum UITypes {
   ID = 'ID',
@@ -44,12 +45,14 @@ enum UITypes {
   User = 'User',
   CreatedBy = 'CreatedBy',
   LastModifiedBy = 'LastModifiedBy',
+  Order = 'Order',
 }
 
 export const UITypesName = {
   [UITypes.ID]: 'ID',
   [UITypes.LinkToAnotherRecord]: 'Link to another record',
   [UITypes.ForeignKey]: 'Foreign key',
+  [UITypes.Order]: 'Order',
   [UITypes.Lookup]: 'Lookup',
   [UITypes.SingleLineText]: 'Single line text',
   [UITypes.LongText]: 'Long text',
@@ -89,9 +92,42 @@ export const UITypesName = {
   [UITypes.User]: 'User',
   [UITypes.CreatedBy]: 'Created by',
   [UITypes.LastModifiedBy]: 'Last modified by',
+  AIButton: 'AI Button',
+  AIPrompt: 'AI Prompt',
 };
 
-export const FieldNameFromUITypes = {
+export const columnTypeName = (column?: ColumnType) => {
+  if (!column) return '';
+
+  switch (column.uidt) {
+    case UITypes.LongText: {
+      if (parseProp(column.meta)?.richMode) {
+        return UITypesName.RichText;
+      }
+
+      if (parseProp(column.meta)[LongTextAiMetaProp]) {
+        return UITypesName.AIPrompt;
+      }
+
+      return UITypesName[column.uidt];
+    }
+    case UITypes.Button: {
+      if (
+        column.uidt === UITypes.Button &&
+        (column?.colOptions as any)?.type === 'ai'
+      ) {
+        return UITypesName.AIButton;
+      }
+
+      return UITypesName[column.uidt];
+    }
+    default: {
+      return column.uidt ? UITypesName[column.uidt] : '';
+    }
+  }
+};
+
+export const FieldNameFromUITypes: Record<UITypes, string> = {
   [UITypes.ID]: 'ID',
   [UITypes.LinkToAnotherRecord]: '{TableName}',
   [UITypes.ForeignKey]: 'Foreign key',
@@ -133,6 +169,7 @@ export const FieldNameFromUITypes = {
   [UITypes.User]: 'User',
   [UITypes.CreatedBy]: 'Created by',
   [UITypes.LastModifiedBy]: 'Last modified by',
+  [UITypes.Order]: 'Order',
 };
 
 export const numericUITypes = [
@@ -180,8 +217,16 @@ export function isVirtualCol(
     UITypes.LastModifiedTime,
     UITypes.CreatedBy,
     UITypes.LastModifiedBy,
+    UITypes.Button,
     // UITypes.Count,
   ].includes(<UITypes>(typeof col === 'object' ? col?.uidt : col));
+}
+
+export function isAIPromptCol(col: ColumnReqType | ColumnType) {
+  return (
+    col.uidt === UITypes.LongText &&
+    parseProp((col as any)?.meta)?.[LongTextAiMetaProp]
+  );
 }
 
 export function isCreatedOrLastModifiedTimeCol(
@@ -208,6 +253,33 @@ export function isCreatedOrLastModifiedByCol(
   );
 }
 
+export function isOrderCol(
+  col:
+    | UITypes
+    | { readonly uidt: UITypes | string }
+    | ColumnReqType
+    | ColumnType
+) {
+  return [UITypes.Order].includes(
+    <UITypes>(typeof col === 'object' ? col?.uidt : col)
+  );
+}
+
+export function isActionButtonCol(
+  col: (ColumnReqType | ColumnType) & {
+    colOptions?: any;
+  }
+) {
+  return (
+    col.uidt === UITypes.Button &&
+    [
+      ButtonActionsType.Script,
+      ButtonActionsType.Webhook,
+      ButtonActionsType.Ai,
+    ].includes((col?.colOptions as any)?.type)
+  );
+}
+
 export function isHiddenCol(
   col: (ColumnReqType | ColumnType) & {
     colOptions?: any;
@@ -224,6 +296,10 @@ export function isHiddenCol(
     }
     // hide system columns in other tables which are has-many used for mm
     return col.colOptions?.type === RelationTypes.HAS_MANY;
+  }
+
+  if (col.uidt === UITypes.Order) {
+    return true;
   }
 
   return ([UITypes.CreatedBy, UITypes.LastModifiedBy] as string[]).includes(
@@ -269,6 +345,7 @@ export const readonlyMetaAllowedTypes = [
   UITypes.Lookup,
   UITypes.Rollup,
   UITypes.Formula,
+  UITypes.Button,
   UITypes.Barcode,
   UITypes.QrCode,
 ];
@@ -318,3 +395,139 @@ export const getUITypesForFormulaDataType = (
       return [];
   }
 };
+
+export const isSupportedDisplayValueColumn = (column: Partial<ColumnType>) => {
+  if (!column?.uidt) return false;
+
+  switch (column.uidt) {
+    case UITypes.SingleLineText:
+    case UITypes.Date:
+    case UITypes.DateTime:
+    case UITypes.Time:
+    case UITypes.Year:
+    case UITypes.PhoneNumber:
+    case UITypes.Email:
+    case UITypes.URL:
+    case UITypes.Number:
+    case UITypes.Currency:
+    case UITypes.Percent:
+    case UITypes.Duration:
+    case UITypes.Decimal:
+    case UITypes.Formula: {
+      return true;
+    }
+    case UITypes.LongText: {
+      if (
+        parseProp(column.meta)?.richMode ||
+        parseProp(column.meta)[LongTextAiMetaProp]
+      ) {
+        return false;
+      }
+      return true;
+    }
+
+    default: {
+      return false;
+    }
+  }
+};
+
+
+export const checkboxIconList = [
+  {
+    checked: 'mdi-check-bold',
+    unchecked: 'mdi-crop-square',
+    label: 'square',
+  },
+  {
+    checked: 'mdi-check-circle-outline',
+    unchecked: 'mdi-checkbox-blank-circle-outline',
+    label: 'circle-check',
+  },
+  {
+    checked: 'mdi-star',
+    unchecked: 'mdi-star-outline',
+    label: 'star',
+  },
+  {
+    checked: 'mdi-heart',
+    unchecked: 'mdi-heart-outline',
+    label: 'heart',
+  },
+  {
+    checked: 'mdi-moon-full',
+    unchecked: 'mdi-moon-new',
+    label: 'circle-filled',
+  },
+  {
+    checked: 'mdi-thumb-up',
+    unchecked: 'mdi-thumb-up-outline',
+    label: 'thumbs-up',
+  },
+  {
+    checked: 'mdi-flag',
+    unchecked: 'mdi-flag-outline',
+    label: 'flag',
+  },
+];
+
+export const ratingIconList = [
+  {
+    full: 'mdi-star',
+    empty: 'mdi-star-outline',
+    label: 'star',
+  },
+  {
+    full: 'mdi-heart',
+    empty: 'mdi-heart-outline',
+    label: 'heart',
+  },
+  {
+    full: 'mdi-moon-full',
+    empty: 'mdi-moon-new',
+    label: 'circle-filled',
+  },
+  {
+    full: 'mdi-thumb-up',
+    empty: 'mdi-thumb-up-outline',
+    label: 'thumbs-up',
+  },
+  {
+    full: 'mdi-flag',
+    empty: 'mdi-flag-outline',
+    label: 'flag',
+  },
+];
+
+export const durationOptions = [
+  {
+    id: 0,
+    title: 'h:mm',
+    example: '(e.g. 1:23)',
+    regex: /(\d+)(?::(\d+))?/,
+  },
+  {
+    id: 1,
+    title: 'h:mm:ss',
+    example: '(e.g. 3:45, 1:23:40)',
+    regex: /(\d+)?(?::(\d+))?(?::(\d+))?/,
+  },
+  {
+    id: 2,
+    title: 'h:mm:ss.s',
+    example: '(e.g. 3:34.6, 1:23:40.0)',
+    regex: /(\d+)?(?::(\d+))?(?::(\d+))?(?:.(\d{0,4})?)?/,
+  },
+  {
+    id: 3,
+    title: 'h:mm:ss.ss',
+    example: '(e.g. 3.45.67, 1:23:40.00)',
+    regex: /(\d+)?(?::(\d+))?(?::(\d+))?(?:.(\d{0,4})?)?/,
+  },
+  {
+    id: 4,
+    title: 'h:mm:ss.sss',
+    example: '(e.g. 3.45.678, 1:23:40.000)',
+    regex: /(\d+)?(?::(\d+))?(?::(\d+))?(?:.(\d{0,4})?)?/,
+  },
+]

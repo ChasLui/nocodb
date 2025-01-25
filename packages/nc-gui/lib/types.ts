@@ -7,6 +7,7 @@ import type {
   FilterType,
   MetaType,
   PaginatedType,
+  PublicAttachmentScope,
   Roles,
   RolesObj,
   TableType,
@@ -30,6 +31,7 @@ interface User {
   base_id?: string
   display_name?: string | null
   featureFlags?: Record<string, boolean>
+  meta?: MetaType
 }
 
 interface ProjectMetaInfo {
@@ -74,6 +76,17 @@ interface Row {
   row: Record<string, any>
   oldRow: Record<string, any>
   rowMeta: {
+    // Used in InfiniteScroll Grid View
+    rowIndex?: number
+    isLoading?: boolean
+    isValidationFailed?: boolean
+    isRowOrderUpdated?: boolean
+    isDragging?: boolean
+    rowProgress?: {
+      message: string
+      progress: number
+    }
+
     new?: boolean
     selected?: boolean
     commentCount?: number
@@ -93,11 +106,16 @@ interface Row {
     id?: string
     position?: string
     dayIndex?: number
-
     overLapIteration?: number
     numberOfOverlaps?: number
     minutes?: number
+    recordIndex?: number // For week spanning records in month view
+    maxSpanning?: number
   }
+}
+
+interface Attachment {
+  url: string
 }
 
 interface CalendarRangeType {
@@ -236,10 +254,32 @@ interface FormFieldsLimitOptionsType {
 interface ImageCropperConfig {
   stencilProps?: {
     aspectRatio?: number
+    /**
+     * It can be used to force the cropper fills all visible area by default:
+     * @default true
+     */
+    fillDefault?: boolean
+    circlePreview?: boolean
   }
   minHeight?: number
   minWidth?: number
   imageRestriction?: 'fill-area' | 'fit-area' | 'stencil' | 'none'
+}
+
+interface ImageCropperProps {
+  imageConfig: {
+    src: string
+    type: string
+    name: string
+  }
+  cropperConfig: ImageCropperConfig
+  uploadConfig?: {
+    path?: string
+    scope?: PublicAttachmentScope
+    // filesize in bytes
+    maxFileSize?: number
+  }
+  showCropper: boolean
 }
 
 interface AuditLogsQuery {
@@ -277,7 +317,45 @@ interface NcTableColumnProps {
   [key: string]: any
 }
 
+interface ProductFeedItem {
+  Id: string
+  Title: string
+  Description: string
+  ['Feed Source']: 'Youtube' | 'Github' | 'All' | 'Cloud'
+  Url: string
+  Tags?: string
+  ['Published Time']: string
+  Image?: string | null
+}
+
 type SordDirectionType = 'asc' | 'desc' | undefined
+
+type NestedArray<T> = T | NestedArray<T>[]
+
+interface ViewActionState {
+  viewProgress: {
+    progress: number
+    message?: string
+  } | null
+  rowProgress: Map<
+    string,
+    {
+      progress: number
+      message?: string
+    }
+  >
+  cellProgress: Map<
+    string,
+    Map<
+      string,
+      {
+        progress: number
+        message?: string
+        icon?: keyof typeof iconMap
+      }
+    >
+  >
+}
 
 export type {
   User,
@@ -309,7 +387,12 @@ export type {
   CalendarRangeType,
   FormFieldsLimitOptionsType,
   ImageCropperConfig,
+  ImageCropperProps,
   AuditLogsQuery,
   NcTableColumnProps,
   SordDirectionType,
+  ProductFeedItem,
+  Attachment,
+  NestedArray,
+  ViewActionState,
 }

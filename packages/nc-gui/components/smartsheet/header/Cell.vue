@@ -30,6 +30,8 @@ const isExpandedBulkUpdateForm = inject(IsExpandedBulkUpdateFormOpenInj, ref(fal
 
 const isDropDownOpen = ref(false)
 
+const isPublic = inject(IsPublicInj, ref(false))
+
 const column = toRef(props, 'column')
 
 const { isUIAllowed, isMetaReadOnly } = useRoles()
@@ -41,9 +43,16 @@ const editColumnDropdown = ref(false)
 const columnOrder = ref<Pick<ColumnReqType, 'column_order'> | null>(null)
 
 const columnTypeName = computed(() => {
-  if (column.value.uidt === UITypes.LongText && parseProp(column?.value?.meta)?.richMode) {
-    return UITypesName.RichText
+  if (column.value.uidt === UITypes.LongText) {
+    if (parseProp(column.value?.meta)?.richMode) {
+      return UITypesName.RichText
+    }
+
+    if (parseProp(column.value?.meta)?.[LongTextAiMetaProp]) {
+      return UITypesName.AIPrompt
+    }
   }
+
   return column.value.uidt ? UITypesName[column.value.uidt] : ''
 })
 
@@ -51,6 +60,16 @@ const addField = async (payload: any) => {
   columnOrder.value = payload
   editColumnDropdown.value = true
 }
+
+const editOrAddProviderRef = ref()
+
+const enableDescription = ref(false)
+
+watch(editColumnDropdown, (val) => {
+  if (!val) {
+    enableDescription.value = false
+  }
+})
 
 const closeAddColumnDropdown = () => {
   columnOrder.value = null
@@ -67,10 +86,13 @@ const isColumnEditAllowed = computed(() => {
   return true
 })
 
-const openHeaderMenu = (e?: MouseEvent) => {
+const openHeaderMenu = (e?: MouseEvent, description = false) => {
   if (isLocked.value || (isExpandedForm.value && e?.type === 'dblclick') || isExpandedBulkUpdateForm.value) return
 
-  if (!isForm.value && isUIAllowed('fieldEdit') && !isMobileMode.value && isColumnEditAllowed.value) {
+  if (!isForm.value && isUIAllowed('fieldEdit') && !isMobileMode.value && (isColumnEditAllowed.value || description)) {
+    if (description) {
+      enableDescription.value = true
+    }
     editColumnDropdown.value = true
   }
 }
@@ -84,6 +106,14 @@ const openDropDown = (e: Event) => {
   e.stopPropagation()
 
   isDropDownOpen.value = !isDropDownOpen.value
+}
+
+const onVisibleChange = () => {
+  editColumnDropdown.value = true
+  if (!editOrAddProviderRef.value?.shouldKeepModalOpen()) {
+    editColumnDropdown.value = false
+    enableDescription.value = false
+  }
 }
 
 const onClick = (e: Event) => {
@@ -113,14 +143,15 @@ const onClick = (e: Event) => {
         isExpandedForm && !isMobileMode && isUIAllowed('fieldEdit') && !isExpandedBulkUpdateForm,
       'bg-gray-100': isExpandedForm && !isExpandedBulkUpdateForm ? editColumnDropdown || isDropDownOpen : false,
     }"
-    @dblclick="openHeaderMenu"
+    @dblclick="openHeaderMenu($event, false)"
     @click.right="openDropDown"
     @click="onClick"
   >
     <div
       class="nc-cell-name-wrapper flex-1 flex items-center"
       :class="{
-        'max-w-[calc(100%_-_23px)]': !isExpandedForm,
+        'max-w-[calc(100%_-_23px)]': !isExpandedForm && !column.description?.length,
+        'max-w-[calc(100%_-_44px)]': !isExpandedForm && column.description?.length,
         'max-w-full': isExpandedForm && !isExpandedBulkUpdateForm,
       }"
     >
@@ -181,6 +212,12 @@ const onClick = (e: Event) => {
         }"
       />
     </div>
+    <NcTooltip v-if="column.description?.length && isPublic && isGrid && !isExpandedForm && !hideMenu">
+      <template #title>
+        {{ column.description }}
+      </template>
+      <GeneralIcon icon="info" class="group-hover:opacity-100 !w-3.5 !h-3.5 !text-gray-500 flex-none" />
+    </NcTooltip>
 
     <template v-if="!hideMenu">
       <div v-if="!isExpandedForm" class="flex-1" />
@@ -199,6 +236,7 @@ const onClick = (e: Event) => {
       :trigger="['click']"
       :placement="isExpandedForm && !isExpandedBulkUpdateForm ? 'bottomLeft' : 'bottomRight'"
       :overlay-class-name="`nc-dropdown-edit-column ${editColumnDropdown ? 'active' : ''}`"
+      @visible-change="onVisibleChange"
     >
       <div v-if="isExpandedForm && !isExpandedBulkUpdateForm" class="h-[1px]" @dblclick.stop>&nbsp;</div>
       <div v-else />
@@ -207,9 +245,11 @@ const onClick = (e: Event) => {
         <div class="nc-edit-or-add-provider-wrapper">
           <LazySmartsheetColumnEditOrAddProvider
             v-if="editColumnDropdown"
+            ref="editOrAddProviderRef"
             :column="columnOrder ? null : column"
             :column-position="columnOrder"
             class="w-full"
+            :edit-description="enableDescription"
             @submit="closeAddColumnDropdown"
             @cancel="closeAddColumnDropdown"
             @click.stop

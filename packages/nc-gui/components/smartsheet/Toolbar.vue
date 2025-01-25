@@ -8,14 +8,28 @@ const { isViewsLoading } = storeToRefs(useViewsStore())
 
 const { isLocalMode } = useViewColumnsOrThrow()
 
+const isPublic = inject(IsPublicInj, ref(false))
+
+const { isSharedBase } = useBase()
+
 const containerRef = ref<HTMLElement>()
 
 const { width } = useElementSize(containerRef)
+
+const router = useRouter()
+
+const disableToolbar = computed(() => router.currentRoute.value.query?.disableToolbar === 'true')
 
 const isTab = computed(() => {
   if (!isCalendar.value) return false
   return width.value > 1200
 })
+
+const { isUIAllowed } = useRoles()
+
+const { isFeatureEnabled } = useBetaFeatureToggle()
+
+const isAutomationEnabled = computed(() => isFeatureEnabled(FEATURE_FLAG.NOCODB_SCRIPTS))
 
 const isToolbarIconMode = computed(() => {
   if (width.value < 768) {
@@ -29,12 +43,12 @@ provide(IsToolbarIconMode, isToolbarIconMode)
 
 <template>
   <div
-    v-if="!isMobileMode"
+    v-if="!isMobileMode && !disableToolbar"
     ref="containerRef"
     :class="{
       'px-4': isMobileMode,
     }"
-    class="nc-table-toolbar relative px-3 flex gap-2 items-center border-b border-gray-200 overflow-hidden xs:(min-h-14) min-h-9 max-h-9 z-7"
+    class="nc-table-toolbar relative px-3 flex gap-2 items-center border-b border-gray-200 overflow-hidden xs:(min-h-14) min-h-[var(--toolbar-height)] max-h-[var(--toolbar-height)] z-7"
   >
     <template v-if="isViewsLoading">
       <a-skeleton-input :active="true" class="!w-44 !h-4 ml-2 !rounded overflow-hidden" />
@@ -63,6 +77,11 @@ provide(IsToolbarIconMode, isToolbarIconMode)
         <LazySmartsheetToolbarGroupByMenu v-if="isGrid && !isLocalMode" />
 
         <LazySmartsheetToolbarSortListMenu v-if="isGrid || isGallery || isKanban" />
+        <LazySmartsheetToolbarBulkAction
+          v-if="(isGrid || isGallery) && !isPublic && isAutomationEnabled && !isSharedBase && isUIAllowed('scriptExecute')"
+        />
+
+        <LazySmartsheetToolbarOpenedViewAction v-if="isCalendar" />
       </div>
 
       <LazySmartsheetToolbarCalendarMode v-if="isCalendar && isTab" :tab="isTab" />
@@ -70,6 +89,7 @@ provide(IsToolbarIconMode, isToolbarIconMode)
       <template v-if="!isMobileMode">
         <LazySmartsheetToolbarRowHeight v-if="isGrid" />
 
+        <LazySmartsheetToolbarOpenedViewAction v-if="!isCalendar" />
         <!-- <LazySmartsheetToolbarQrScannerButton v-if="isMobileMode && (isGrid || isKanban || isGallery)" /> -->
 
         <div class="flex-1" />

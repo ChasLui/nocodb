@@ -11,11 +11,13 @@ const { modelValue, isPk = false } = defineProps<Props>()
 
 const emit = defineEmits(['update:modelValue'])
 
-const { showNull, isMobileMode } = useGlobal()
+const { showNull } = useGlobal()
 
 const column = inject(ColumnInj, null)!
 
 const readOnly = inject(ReadonlyInj, ref(false))
+
+const rawReadOnly = inject(RawReadonlyInj, ref(false))
 
 const active = inject(ActiveCellInj, ref(false))
 
@@ -60,24 +62,61 @@ const localState = computed({
   set(val?: dayjs.Dayjs) {
     isClearedInputMode.value = false
 
-    if (!val) {
-      emit('update:modelValue', null)
-      return
-    }
-
-    if (val?.isValid()) {
-      emit('update:modelValue', val.format('YYYY'))
-    }
+    saveChanges(val)
 
     open.value = false
   },
 })
+
+const savingValue = ref()
+
+function saveChanges(val?: dayjs.Dayjs) {
+  if (!val) {
+    if (savingValue.value === val) {
+      return
+    }
+
+    savingValue.value = null
+
+    emit('update:modelValue', null)
+    return
+  }
+
+  if (val?.isValid()) {
+    const formattedValue = val.format('YYYY')
+
+    if (savingValue.value === formattedValue) {
+      return
+    }
+
+    savingValue.value = formattedValue
+
+    emit('update:modelValue', val.format('YYYY'))
+  }
+}
 
 watchEffect(() => {
   if (localState.value) {
     tempDate.value = localState.value
   }
 })
+
+const handleUpdateValue = (e: Event, save = false, valueToSave?: dayjs.Dayjs) => {
+  const targetValue = valueToSave || (e.target as HTMLInputElement).value
+  if (!targetValue) {
+    tempDate.value = undefined
+    return
+  }
+  const value = dayjs(targetValue, 'YYYY')
+
+  if (value.isValid()) {
+    tempDate.value = value
+
+    if (save) {
+      saveChanges(value)
+    }
+  }
+}
 
 const randomClass = `picker_${Math.floor(Math.random() * 99999)}`
 
@@ -88,6 +127,12 @@ onClickOutside(datePickerRef, (e) => {
 })
 
 const onBlur = (e) => {
+  const value = (e?.target as HTMLInputElement)?.value
+
+  if (value && dayjs(value, 'YYYY').isValid()) {
+    handleUpdateValue(e, true, dayjs(dayjs(value).format('YYYY')))
+  }
+
   if (
     (e?.relatedTarget as HTMLElement)?.closest(`.${randomClass}, .nc-${randomClass}`) ||
     (e?.target as HTMLElement)?.closest(`.${randomClass}, .nc-${randomClass}`)
@@ -206,46 +251,26 @@ useEventListener(document, 'keydown', (e: KeyboardEvent) => {
   // To prevent event listener on non active cell
   if (!active.value) return
 
-  if (
-    e.altKey ||
-    e.ctrlKey ||
-    e.shiftKey ||
-    e.metaKey ||
-    !isGrid.value ||
-    isExpandedForm.value ||
-    isEditColumn.value ||
-    isExpandedFormOpenExist()
-  ) {
+  if (e.altKey || e.shiftKey || !isGrid.value || isExpandedForm.value || isEditColumn.value || isExpandedFormOpenExist()) {
     return
   }
 
-  switch (e.key) {
-    case ';':
-      localState.value = dayjs(new Date())
-      e.preventDefault()
-      break
-    default:
-      if (!isOpen.value && datePickerRef.value && /^[0-9a-z]$/i.test(e.key)) {
-        isClearedInputMode.value = true
-        datePickerRef.value.focus()
-        editable.value = true
-        open.value = true
+  if (e.metaKey || e.ctrlKey) {
+    if (e.key === ';') {
+      if (isGrid.value && !isExpandedForm.value && !isEditColumn.value) {
+        localState.value = dayjs(new Date())
+        e.preventDefault()
       }
+    } else return
+  }
+
+  if (!isOpen.value && datePickerRef.value && /^[0-9a-z]$/i.test(e.key)) {
+    isClearedInputMode.value = true
+    datePickerRef.value.focus()
+    editable.value = true
+    open.value = true
   }
 })
-
-const handleUpdateValue = (e: Event) => {
-  const targetValue = (e.target as HTMLInputElement).value
-  if (!targetValue) {
-    tempDate.value = undefined
-    return
-  }
-  const value = dayjs(targetValue, 'YYYY')
-
-  if (value.isValid()) {
-    tempDate.value = value
-  }
-}
 
 function handleSelectDate(value?: dayjs.Dayjs) {
   tempDate.value = value
@@ -270,12 +295,13 @@ function handleSelectDate(value?: dayjs.Dayjs) {
       class="nc-year-picker flex items-center justify-between ant-picker-input relative"
     >
       <input
+        v-if="!rawReadOnly"
         ref="datePickerRef"
         type="text"
         :value="localState?.format('YYYY') ?? ''"
         :placeholder="placeholder"
         class="nc-year-input border-none outline-none !text-current bg-transparent !focus:(border-none outline-none ring-transparent)"
-        :readonly="readOnly || !!isMobileMode"
+        :readonly="readOnly"
         @blur="onBlur"
         @keydown="handleKeydown($event, open)"
         @mouseup.stop
@@ -283,6 +309,9 @@ function handleSelectDate(value?: dayjs.Dayjs) {
         @click="clickHandler"
         @input="handleUpdateValue"
       />
+      <span v-else>
+        {{ localState?.format('YYYY') ?? '' }}
+      </span>
 
       <GeneralIcon
         v-if="localState && !readOnly"

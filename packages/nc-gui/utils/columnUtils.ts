@@ -1,7 +1,42 @@
-import type { ColumnType, LinkToAnotherRecordType } from 'nocodb-sdk'
-import { RelationTypes, UITypes } from 'nocodb-sdk'
+import type { FunctionalComponent, SVGAttributes } from 'vue'
+import type { ButtonType, ColumnType, FormulaType, IntegrationType, LinkToAnotherRecordType } from 'nocodb-sdk'
+import {
+  ButtonActionsType,
+  RelationTypes,
+  UITypes,
+  LongTextAiMetaProp as _LongTextAiMetaProp,
+  checkboxIconList,
+  ratingIconList,
+} from 'nocodb-sdk'
 
-const uiTypes = [
+export interface UiTypesType {
+  name: UITypes | string
+  icon: FunctionalComponent<SVGAttributes, {}, any, {}> | VNode
+  virtual?: number | boolean
+  deprecated?: number | boolean
+  isNew?: number | boolean
+}
+
+export const AIButton = 'AIButton'
+
+export const AIPrompt = 'AIPrompt'
+
+export const LongTextAiMetaProp = _LongTextAiMetaProp
+
+const uiTypes: UiTypesType[] = [
+  {
+    name: AIButton,
+    icon: iconMap.cellAiButton,
+    virtual: 1,
+    isNew: 1,
+    deprecated: 0,
+  },
+  {
+    name: AIPrompt,
+    icon: iconMap.cellAi,
+    isNew: 1,
+    deprecated: 0,
+  },
   {
     name: UITypes.Links,
     icon: iconMap.cellLinks,
@@ -11,7 +46,7 @@ const uiTypes = [
     name: UITypes.LinkToAnotherRecord,
     icon: iconMap.cellLinks,
     virtual: 1,
-    deprecated: 1,
+    deprecated: 0,
   },
   {
     name: UITypes.Lookup,
@@ -56,7 +91,7 @@ const uiTypes = [
   },
   {
     name: UITypes.Year,
-    icon: iconMap.cellDate,
+    icon: iconMap.cellYear,
   },
   {
     name: UITypes.Time,
@@ -134,6 +169,11 @@ const uiTypes = [
   {
     name: UITypes.User,
     icon: iconMap.cellUser,
+  },
+  {
+    name: UITypes.Button,
+    icon: iconMap.cellButton,
+    virtual: 1,
   },
   {
     name: UITypes.CreatedTime,
@@ -233,13 +273,121 @@ const isColumnSupportsGroupBySettings = (colOrUidt: ColumnType) => {
   return [UITypes.SingleSelect, UITypes.User, UITypes.CreatedBy, UITypes.Checkbox, UITypes.Rating].includes(uidt)
 }
 
+const isColumnInvalid = (
+  col: ColumnType,
+  aiIntegrations: Partial<IntegrationType>[] = [],
+  isReadOnly = false,
+): { isInvalid: boolean; tooltip: string } => {
+  const result = {
+    isInvalid: false,
+    tooltip: 'msg.invalidColumnConfiguration',
+  }
+
+  switch (col.uidt) {
+    case UITypes.Formula:
+      result.isInvalid = !!(col.colOptions as FormulaType).error
+      break
+    case UITypes.Button: {
+      const colOptions = col.colOptions as ButtonType
+      if (colOptions.type === ButtonActionsType.Webhook) {
+        result.isInvalid = !colOptions.fk_webhook_id
+      } else if (colOptions.type === ButtonActionsType.Url) {
+        result.isInvalid = !!colOptions.error
+      } else if (colOptions.type === ButtonActionsType.Ai) {
+        result.isInvalid =
+          !colOptions.fk_integration_id ||
+          (isReadOnly
+            ? false
+            : !!colOptions.fk_integration_id && !ncIsArrayIncludes(aiIntegrations, colOptions.fk_integration_id, 'id'))
+        result.tooltip = 'title.aiIntegrationMissing'
+      }
+      break
+    }
+    case UITypes.LongText: {
+      if (parseProp(col.meta)[LongTextAiMetaProp]) {
+        const colOptions = col.colOptions as ButtonType
+
+        result.isInvalid =
+          !colOptions.fk_integration_id ||
+          (isReadOnly
+            ? false
+            : !!colOptions.fk_integration_id && !ncIsArrayIncludes(aiIntegrations, colOptions.fk_integration_id, 'id'))
+
+        result.tooltip = 'title.aiIntegrationMissing'
+      }
+      break
+    }
+  }
+
+  return result
+}
+
+// cater existing v1 cases
+
+function extractCheckboxIcon(meta: string | Record<string, any> = null) {
+  const parsedMeta = parseProp(meta)
+
+  const icon = {
+    checked: 'mdi-check-circle-outline',
+    unchecked: 'mdi-checkbox-blank-circle-outline',
+  }
+
+  if (parsedMeta.icon) {
+    icon.checked = parsedMeta.icon.checked || icon.checked
+    icon.unchecked = parsedMeta.icon.unchecked || icon.unchecked
+  } else if (typeof parsedMeta.iconIdx === 'number' && checkboxIconList[parsedMeta.iconIdx]) {
+    icon.checked = checkboxIconList[parsedMeta.iconIdx].checked
+    icon.unchecked = checkboxIconList[parsedMeta.iconIdx].unchecked
+  }
+  return icon
+}
+
+function extractRatingIcon(meta: string | Record<string, any> = null) {
+  const parsedMeta = parseProp(meta)
+
+  const icon = {
+    full: 'mdi-star',
+    empty: 'mdi-star-outline',
+  }
+
+  if (parsedMeta.icon) {
+    icon.full = parsedMeta.icon.full || icon.full
+    icon.empty = parsedMeta.icon.empty || icon.empty
+  } else if (typeof parsedMeta.iconIdx === 'number' && ratingIconList[parsedMeta.iconIdx]) {
+    icon.full = ratingIconList[parsedMeta.iconIdx].full
+    icon.empty = ratingIconList[parsedMeta.iconIdx].empty
+  }
+  return icon
+}
+
+const formViewHiddenColTypes = [
+  UITypes.Rollup,
+  UITypes.Lookup,
+  UITypes.Formula,
+  UITypes.QrCode,
+  UITypes.Barcode,
+  UITypes.Button,
+  UITypes.SpecificDBType,
+  UITypes.CreatedTime,
+  UITypes.LastModifiedTime,
+  UITypes.CreatedBy,
+  UITypes.LastModifiedBy,
+  AIButton,
+]
+
 export {
   uiTypes,
   isTypableInputColumn,
   isColumnSupportsGroupBySettings,
   getUIDTIcon,
+  isColumnInvalid,
   getUniqueColumnName,
   isColumnRequiredAndNull,
   isColumnRequired,
   isVirtualColRequired,
+  checkboxIconList,
+  ratingIconList,
+  extractCheckboxIcon,
+  extractRatingIcon,
+  formViewHiddenColTypes,
 }

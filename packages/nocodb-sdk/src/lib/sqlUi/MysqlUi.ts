@@ -1,5 +1,5 @@
 import UITypes from '../UITypes';
-import { IDType } from '~/lib';
+import { ColumnType, IDType } from '~/lib';
 
 const dbTypes = [
   'int',
@@ -181,6 +181,30 @@ export class MysqlUi {
         dtxs: '',
         altered: 1,
         uidt: UITypes.LastModifiedBy,
+        uip: '',
+        uicn: '',
+        system: true,
+      },
+      {
+        column_name: 'nc_order',
+        title: 'nc_order',
+        dt: 'decimal',
+        dtx: 'decimal',
+        ct: 'decimal(40,20)',
+        nrqd: true,
+        rqd: false,
+        ck: false,
+        pk: false,
+        un: false,
+        ai: false,
+        cdf: null,
+        clen: null,
+        np: 40,
+        ns: 20,
+        dtxp: '40,20',
+        dtxs: '',
+        altered: 1,
+        uidt: UITypes.Order,
         uip: '',
         uicn: '',
         system: true,
@@ -1132,6 +1156,9 @@ export class MysqlUi {
       case 'JSON':
         colProp.dt = 'json';
         break;
+      case 'Order':
+        colProp.dt = 'decimal';
+        break;
       default:
         colProp.dt = 'varchar';
         break;
@@ -1281,6 +1308,7 @@ export class MysqlUi {
         ];
 
       case 'Formula':
+      case 'Button':
         return [
           'char',
           'varchar',
@@ -1325,7 +1353,6 @@ export class MysqlUi {
           'multipolygon',
         ];
 
-      case 'Button':
       default:
         return dbTypes;
     }
@@ -1333,6 +1360,24 @@ export class MysqlUi {
 
   static getUnsupportedFnList() {
     return ['COUNTA', 'COUNT', 'DATESTR'];
+  }
+
+  static getCurrentDateDefault(col: Partial<ColumnType>) {
+    // if database datatype timestamp or datetime then return CURRENT_TIMESTAMP
+    if (
+      col.dt &&
+      (col.dt.toLowerCase() === 'timestamp' ||
+        col.dt.toLowerCase() === 'datetime')
+    ) {
+      return 'CURRENT_TIMESTAMP';
+    }
+
+    // database type is not defined(means column create) and ui datatype is datetime then return CURRENT_TIMESTAMP
+    // in this scenario it will create column with datatype timestamp/datetime
+    if (!col.dt && col.uidt === UITypes.DateTime) {
+      return 'CURRENT_TIMESTAMP';
+    }
+    return null;
   }
 
   static isEqual(dataType1: string, dataType2: string) {

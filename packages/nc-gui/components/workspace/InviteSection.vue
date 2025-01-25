@@ -26,6 +26,7 @@ const workspaceStore = useWorkspace()
 const { inviteCollaborator: _inviteCollaborator } = workspaceStore
 const { isInvitingCollaborators } = storeToRefs(workspaceStore)
 const { workspaceRoles } = useRoles()
+const { t } = useI18n()
 
 // all user input emails are stored here
 const emailBadges = ref<Array<string>>([])
@@ -43,7 +44,7 @@ const insertOrUpdateString = (str: string) => {
   emailBadges.value.push(str)
 }
 
-const emailInputValidation = (input: string, isBulkEmailCopyPaste: boolean = false): boolean => {
+const emailInputValidation = (input: string, isBulkEmailCopyPaste = false): boolean => {
   if (!input.length) {
     if (isBulkEmailCopyPaste) return false
 
@@ -130,7 +131,7 @@ const inviteCollaborator = async () => {
     }
 
     await _inviteCollaborator(payloadData, inviteData.roles)
-    message.success('Invitation sent successfully')
+    message.success(t('msg.info.inviteSent'))
     inviteData.email = ''
     emailBadges.value = []
   } catch (e: any) {

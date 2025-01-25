@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { isSystemColumn } from 'nocodb-sdk';
+import { isLinksOrLTAR, isSystemColumn } from 'nocodb-sdk';
 import * as XLSX from 'xlsx';
 import papaparse from 'papaparse';
-import { nocoExecute } from 'nc-help';
+import type { NcApiVersion } from 'nocodb-sdk';
 import type { BaseModelSqlv2 } from '~/db/BaseModelSqlv2';
 import type { PathParams } from '~/helpers/dataHelpers';
 import type { NcContext } from '~/interface/config';
 import type { Filter } from '~/models';
+import type LinkToAnotherRecordColumn from '../models/LinkToAnotherRecordColumn';
+import { nocoExecute } from '~/utils';
 import { getDbRows, getViewAndModelByAliasOrId } from '~/helpers/dataHelpers';
 import { Base, Column, Model, Source, View } from '~/models';
 import { NcBaseError, NcError } from '~/helpers/catchError';
@@ -28,6 +30,8 @@ export class DatasService {
       ignorePagination?: boolean;
       limitOverride?: number;
       throwErrorIfInvalidParams?: boolean;
+      getHiddenColumns?: boolean;
+      apiVersion?: NcApiVersion;
     },
   ) {
     let { model, view } = param as { view?: View; model?: Model };
@@ -41,6 +45,27 @@ export class DatasService {
       view = modelAndView.view;
     }
 
+    // check for linkColumnId query param and handle it
+    if (param.query.linkColumnId) {
+      const linkColumn = await Column.get<LinkToAnotherRecordColumn>(context, {
+        colId: param.query.linkColumnId,
+      });
+
+      if (
+        !linkColumn ||
+        !isLinksOrLTAR(linkColumn) ||
+        linkColumn.colOptions.fk_related_model_id !== model.id
+      ) {
+        NcError.fieldNotFound(param.query?.linkColumnId, {
+          customMessage: `Link column with id ${param.query.linkColumnId} not found`,
+        });
+      }
+
+      if (linkColumn.colOptions.fk_target_view_id) {
+        view = await View.get(context, linkColumn.colOptions.fk_target_view_id);
+      }
+    }
+
     return await this.getDataList(context, {
       model,
       view,
@@ -48,6 +73,8 @@ export class DatasService {
       throwErrorIfInvalidParams: true,
       ignorePagination: param.ignorePagination,
       limitOverride: param.limitOverride,
+      getHiddenColumns: param.getHiddenColumns,
+      apiVersion: param.apiVersion,
     });
   }
 
@@ -74,6 +101,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const countArgs: any = { ...param.query, throwErrorIfInvalidParams: true };
@@ -92,6 +120,7 @@ export class DatasService {
       body: unknown;
       cookie: any;
       disableOptimization?: boolean;
+      query: any;
     },
   ) {
     const { model, view } = await getViewAndModelByAliasOrId(context, param);
@@ -102,9 +131,15 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
-    return await baseModel.nestedInsert(param.body, null, param.cookie);
+    return await baseModel.nestedInsert(
+      param.body,
+      param.cookie,
+      null,
+      param?.query,
+    );
   }
 
   async dataUpdate(
@@ -123,6 +158,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     return await baseModel.updateByPk(
@@ -144,6 +180,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     // if xcdb base skip checking for LTAR
@@ -170,6 +207,8 @@ export class DatasService {
       ignorePagination?: boolean;
       limitOverride?: number;
       customConditions?: Filter[];
+      getHiddenColumns?: boolean;
+      apiVersion?: NcApiVersion;
     },
   ) {
     const {
@@ -177,6 +216,7 @@ export class DatasService {
       view: view,
       query = {},
       ignoreViewFilterAndSort = false,
+      apiVersion,
     } = param;
 
     const source = await Source.get(context, model.source_id);
@@ -187,6 +227,7 @@ export class DatasService {
         id: model.id,
         viewId: view?.id,
         dbDriver: await NcConnectionMgrv2.get(source),
+        source,
       }));
 
     const { ast, dependencyFields } = await getAst(context, {
@@ -194,6 +235,8 @@ export class DatasService {
       query,
       view: view,
       throwErrorIfInvalidParams: param.throwErrorIfInvalidParams,
+      getHiddenColumn: param.getHiddenColumns,
+      apiVersion,
     });
 
     const listArgs: any = dependencyFields;
@@ -213,12 +256,15 @@ export class DatasService {
         try {
           data = await nocoExecute(
             ast,
-            await baseModel.list(listArgs, {
-              ignoreViewFilterAndSort,
-              throwErrorIfInvalidParams: param.throwErrorIfInvalidParams,
-              ignorePagination: param.ignorePagination,
-              limitOverride: param.limitOverride,
-            }),
+            await baseModel.list(
+              { ...listArgs, apiVersion: param.apiVersion },
+              {
+                ignoreViewFilterAndSort,
+                throwErrorIfInvalidParams: param.throwErrorIfInvalidParams,
+                ignorePagination: param.ignorePagination,
+                limitOverride: param.limitOverride,
+              },
+            ),
             {},
             listArgs,
           );
@@ -251,6 +297,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const args: any = { ...query };
@@ -283,6 +330,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const listArgs: any = { ...query };
@@ -320,6 +368,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
     const row = await baseModel.readByPk(param.rowId, false, param.query, {
       getHiddenColumn: param.getHiddenColumn,
@@ -344,6 +393,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     return await baseModel.exist(param.rowId);
@@ -381,6 +431,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const { ast, dependencyFields } = await getAst(context, {
@@ -429,7 +480,7 @@ export class DatasService {
 
   async dataListByViewId(
     context: NcContext,
-    param: { viewId: string; query: any },
+    param: { viewId: string; query: any; apiVersion?: NcApiVersion },
   ) {
     const view = await View.get(context, param.viewId);
 
@@ -439,7 +490,12 @@ export class DatasService {
 
     if (!model) NcError.tableNotFound(view?.fk_model_id || param.viewId);
 
-    return await this.getDataList(context, { model, view, query: param.query });
+    return await this.getDataList(context, {
+      model,
+      view,
+      query: param.query,
+      apiVersion: param.apiVersion,
+    });
   }
 
   async mmList(
@@ -465,6 +521,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const key = `${model.title}List`;
@@ -529,6 +586,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const key = 'List';
@@ -593,6 +651,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const key = 'List';
@@ -657,6 +716,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const key = 'List';
@@ -721,6 +781,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const key = `${model.title}List`;
@@ -775,6 +836,7 @@ export class DatasService {
       const baseModel = await Model.getBaseModelSQL(context, {
         id: model.id,
         dbDriver: await NcConnectionMgrv2.get(source),
+        source,
       });
 
       const { ast, dependencyFields } = await getAst(context, {
@@ -808,6 +870,7 @@ export class DatasService {
     const baseModel = await Model.getBaseModelSQL(context, {
       id: model.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     return await baseModel.insert(param.body, null, param.cookie);
@@ -832,6 +895,7 @@ export class DatasService {
     const baseModel = await Model.getBaseModelSQL(context, {
       id: model.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     return await baseModel.updateByPk(
@@ -860,6 +924,7 @@ export class DatasService {
     const baseModel = await Model.getBaseModelSQL(context, {
       id: model.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     return await baseModel.delByPk(param.rowId, null, param.cookie);
@@ -889,6 +954,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     await baseModel.removeChild({
@@ -925,6 +991,7 @@ export class DatasService {
       id: model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     await baseModel.addChild({
@@ -988,6 +1055,7 @@ export class DatasService {
       id: view.model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const { offset, dbRows, elapsed } = await getDbRows(context, {
@@ -1026,6 +1094,7 @@ export class DatasService {
       id: view.model.id,
       viewId: view?.id,
       dbDriver: await NcConnectionMgrv2.get(source),
+      source,
     });
 
     const { offset, dbRows, elapsed } = await getDbRows(context, {

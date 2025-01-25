@@ -1,8 +1,6 @@
 <script lang="ts" setup>
 import { UITypes, isVirtualCol, parseStringDateTime } from 'nocodb-sdk'
 
-import MaximizeIcon from '~icons/nc-icons/maximize'
-
 const props = withDefaults(
   defineProps<{
     row: any
@@ -12,9 +10,11 @@ const props = withDefaults(
     displayValueTypeAndFormatProp: { type: string; format: string }
     isLoading: boolean
     isLinked: boolean
+    isSelected?: boolean
   }>(),
   {
     isLoading: false,
+    isSelected: false,
   },
 )
 
@@ -27,6 +27,8 @@ provide(RowHeightInj, ref(1 as const))
 const isForm = inject(IsFormInj, ref(false))
 
 const row = useVModel(props, 'row')
+
+const { isLinked, isLoading, isSelected } = toRefs(props)
 
 const isPublic = inject(IsPublicInj, ref(false))
 
@@ -78,6 +80,7 @@ const displayValue = computed(() => {
       :class="{
         '!bg-white': isLoading,
         '!hover:bg-white': readOnly,
+        'nc-is-selected': isSelected,
       }"
       :body-style="{ padding: '6px 10px !important', borderRadius: 0 }"
       :hoverable="false"
@@ -159,7 +162,7 @@ const displayValue = computed(() => {
               class="z-10 flex items-center justify-center nc-expand-item !group-hover:visible !invisible !h-7 !w-7 transition-all !hover:children:(w-4.5 h-4.5)"
               @click.stop="$emit('expand', row)"
             >
-              <MaximizeIcon class="flex-none w-4 h-4 scale-125" />
+              <GeneralIcon icon="maximize" class="flex-none w-4 h-4 scale-125" />
             </button>
           </NcTooltip>
         </div>
@@ -257,13 +260,16 @@ const displayValue = computed(() => {
       .ant-select-selector {
         @apply !border-none flex-nowrap pr-4.5;
       }
-      .ant-select-arrow {
+      .ant-select-arrow,
+      .ant-select-clear {
         @apply right-[3px];
       }
     }
   }
 }
 .nc-link-record-cell-tooltip {
+  @apply !bg-transparent !hover:bg-transparent;
+
   :deep(.nc-cell-icon) {
     @apply !ml-0;
   }
@@ -277,7 +283,8 @@ const displayValue = computed(() => {
 .nc-list-item {
   @apply border-1 border-transparent rounded-md;
 
-  &:focus-visible {
+  &:focus-visible,
+  &.nc-is-selected {
     @apply border-brand-500;
     box-shadow: 0 0 0 1px #3366ff;
   }

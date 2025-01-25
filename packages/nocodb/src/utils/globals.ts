@@ -1,6 +1,6 @@
 export enum MetaTable {
   PROJECT = 'nc_bases_v2',
-  BASES = 'nc_sources_v2',
+  SOURCES = 'nc_sources_v2',
   MODELS = 'nc_models_v2',
   COLUMNS = 'nc_columns_v2',
   COLUMN_VALIDATIONS = 'nc_columns_validations_v2',
@@ -12,6 +12,7 @@ export enum MetaTable {
   COL_FORMULA = 'nc_col_formula_v2',
   COL_QRCODE = 'nc_col_qrcode_v2',
   COL_BARCODE = 'nc_col_barcode_v2',
+  COL_LONG_TEXT = 'nc_col_long_text_v2',
   FILTER_EXP = 'nc_filter_exp_v2',
   // HOOK_FILTER_EXP = 'nc_hook_filter_exp_v2',
   SORT = 'nc_sort_v2',
@@ -53,6 +54,13 @@ export enum MetaTable {
   COMMENTS_REACTIONS = 'nc_comment_reactions',
   JOBS = 'nc_jobs',
   INTEGRATIONS = 'nc_integrations_v2',
+  INTEGRATIONS_STORE = 'nc_integrations_store_v2',
+  FILE_REFERENCES = 'nc_file_references',
+  COL_BUTTON = 'nc_col_button_v2',
+  SNAPSHOT = 'nc_snapshots',
+  DATA_REFLECTION = 'nc_data_reflection',
+  CUSTOM_URLS = 'nc_custom_urls_v2',
+  SCRIPTS = 'nc_scripts',
 }
 
 export enum MetaTableOldV2 {
@@ -97,7 +105,7 @@ export const orderedMetaTables = [
   MetaTable.COLUMN_VALIDATIONS,
   MetaTable.COLUMNS,
   MetaTable.MODELS,
-  MetaTable.BASES,
+  MetaTable.SOURCES,
   MetaTable.PROJECT,
 ];
 
@@ -129,7 +137,7 @@ export const sakilaTableNames = [
 
 export enum CacheScope {
   PROJECT = 'base',
-  BASE = 'source',
+  SOURCE = 'source',
   MODEL = 'model',
   COLUMN = 'column',
   COL_PROP = 'colProp',
@@ -140,6 +148,7 @@ export enum CacheScope {
   COL_FORMULA = 'colFormula',
   COL_QRCODE = 'colQRCode',
   COL_BARCODE = 'colBarcode',
+  COL_LONG_TEXT = 'colLongText',
   FILTER_EXP = 'filterExp',
   SORT = 'sort',
   SHARED_VIEW = 'sharedView',
@@ -182,6 +191,13 @@ export enum CacheScope {
   SSO_CLIENT = 'ssoClient',
   EXTENSION = 'uiExtension',
   INTEGRATION = 'integration',
+  COL_BUTTON = 'colButton',
+  CMD_PALETTE = 'cmdPalette',
+  PRODUCT_FEED = 'productFeed',
+  SNAPSHOT = 'snapshot',
+  DATA_REFLECTION = 'dataReflection',
+  CUSTOM_URLS = 'customUrls',
+  SCRIPTS = 'nc_scripts',
 }
 
 export enum CacheGetType {
@@ -194,68 +210,6 @@ export enum CacheDelDirection {
   PARENT_TO_CHILD = 'PARENT_TO_CHILD',
   CHILD_TO_PARENT = 'CHILD_TO_PARENT',
 }
-
-export const GROUPBY_COMPARISON_OPS = <const>[
-  // these are used for groupby
-  'gb_eq',
-  'gb_null',
-];
-export const COMPARISON_OPS = <const>[
-  'eq',
-  'neq',
-  'not',
-  'like',
-  'nlike',
-  'empty',
-  'notempty',
-  'null',
-  'notnull',
-  'checked',
-  'notchecked',
-  'blank',
-  'notblank',
-  'allof',
-  'anyof',
-  'nallof',
-  'nanyof',
-  'gt',
-  'lt',
-  'gte',
-  'lte',
-  'ge',
-  'le',
-  'in',
-  'isnot',
-  'is',
-  'isWithin',
-  'btw',
-  'nbtw',
-];
-
-export const IS_WITHIN_COMPARISON_SUB_OPS = <const>[
-  'pastWeek',
-  'pastMonth',
-  'pastYear',
-  'nextWeek',
-  'nextMonth',
-  'nextYear',
-  'pastNumberOfDays',
-  'nextNumberOfDays',
-];
-
-export const COMPARISON_SUB_OPS = <const>[
-  'today',
-  'tomorrow',
-  'yesterday',
-  'oneWeekAgo',
-  'oneWeekFromNow',
-  'oneMonthAgo',
-  'oneMonthFromNow',
-  'daysAgo',
-  'daysFromNow',
-  'exactDate',
-  ...IS_WITHIN_COMPARISON_SUB_OPS,
-];
 
 export const DB_TYPES = <const>[
   'mysql2',
@@ -286,8 +240,24 @@ export const RootScopeTables = {
     MetaTable.STORE,
     MetaTable.NOTIFICATION,
     MetaTable.JOBS,
+    MetaTable.FILE_REFERENCES,
+    MetaTable.DATA_REFLECTION,
     // Temporarily added need to be discussed within team
     MetaTable.AUDIT,
+    MetaTable.CUSTOM_URLS,
   ],
   [RootScopes.BASE]: [MetaTable.PROJECT],
+  // It's a special case and Workspace is equivalent to org in oss
+  [RootScopes.WORKSPACE]: [
+    MetaTable.INTEGRATIONS,
+    MetaTable.INTEGRATIONS_STORE,
+    // We need to clear fk_integration_id from following tables
+    MetaTable.COL_BUTTON,
+    MetaTable.COL_LONG_TEXT,
+  ],
 };
+
+export const CACHE_PREFIX =
+  process.env.NC_CACHE_PREFIX && process.env.NC_CACHE_PREFIX.trim().length > 0
+    ? process.env.NC_CACHE_PREFIX
+    : 'nc';

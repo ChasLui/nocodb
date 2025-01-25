@@ -24,7 +24,7 @@ provide(ColumnInj, column)
 
 <template>
   <div
-    class="nc-cell w-full h-full relative"
+    class="nc-cell w-full h-full relative nc-cell-field"
     :class="{
       'nc-grid-numeric-cell-right': isGrid && isNumericField && !isExpandedFormOpen && !isRating(column),
     }"
@@ -59,7 +59,7 @@ provide(ColumnInj, column)
 }
 
 .nc-cell {
-  @apply text-sm text-gray-600;
+  @apply text-sm;
   font-weight: 500;
 
   :deep(.nc-cell-field) {

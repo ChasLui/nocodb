@@ -1,5 +1,6 @@
 import UITypes from '../UITypes';
 import { IDType } from './index';
+import { ColumnType } from '~/lib';
 
 const dbTypes = [
   'BIGINT',
@@ -156,6 +157,30 @@ export class DatabricksUi {
         dtxs: '',
         altered: 1,
         uidt: UITypes.LastModifiedBy,
+        uip: '',
+        uicn: '',
+        system: true,
+      },
+      {
+        column_name: 'nc_order',
+        title: 'nc_order',
+        dt: 'decimal',
+        dtx: 'specificType',
+        ct: 'decimal(38,18)',
+        nrqd: true,
+        rqd: false,
+        ck: false,
+        pk: false,
+        un: false,
+        ai: false,
+        cdf: null,
+        clen: null,
+        np: 38,
+        ns: 18,
+        dtxp: '38,18',
+        dtxs: '',
+        altered: 1,
+        uidt: UITypes.Order,
         uip: '',
         uicn: '',
         system: true,
@@ -660,6 +685,9 @@ export class DatabricksUi {
       case 'JSON':
         colProp.dt = 'string';
         break;
+      case 'Order':
+        colProp.dt = 'decimal';
+        break;
       default:
         colProp.dt = 'string';
         break;
@@ -736,6 +764,7 @@ export class DatabricksUi {
         return ['int'];
 
       case 'Formula':
+      case 'Button':
         return ['string'];
 
       case 'Rollup':
@@ -766,7 +795,6 @@ export class DatabricksUi {
       case 'JSON':
         return ['string'];
 
-      case 'Button':
       default:
         return dbTypes;
     }
@@ -792,6 +820,10 @@ export class DatabricksUi {
       'MONTH',
       'HOUR',
     ];
+  }
+
+  static getCurrentDateDefault(_col: Partial<ColumnType>) {
+    return null;
   }
 
   static isEqual(dataType1: string, dataType2: string) {

@@ -11,15 +11,21 @@ import PurgeIcons from 'vite-plugin-purge-icons'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@vueuse/nuxt', 'nuxt-windicss', '@nuxt/image', '@pinia/nuxt'],
+  future: {
+    compatibilityVersion: 4,
+  },
 
+  modules: ['@vueuse/nuxt', 'nuxt-windicss', '@nuxt/image', '@pinia/nuxt'],
   ssr: false,
+
   router: {
     options: {
       hashMode: true,
     },
   },
+
   spaLoadingTemplate: false,
+
   app: {
     pageTransition: process.env.NUXT_PAGE_TRANSITION_DISABLE
       ? false
@@ -116,6 +122,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       ncBackendUrl: '',
+      env: 'production',
     },
   },
 
@@ -146,6 +153,9 @@ export default defineNuxtConfig({
         defaultClass: 'nc-icon',
         customCollections: {
           'nc-icons': FileSystemIconLoader('./assets/nc-icons', (svg) =>
+            svg.replace(/^<svg (?!=\s*data-ignore)/, '<svg stroke="currentColor" '),
+          ),
+          'nc-icons-v2': FileSystemIconLoader('./assets/nc-icons-v2', (svg) =>
             svg.replace(/^<svg (?!=\s*data-ignore)/, '<svg stroke="currentColor" '),
           ),
         },
@@ -206,6 +216,76 @@ export default defineNuxtConfig({
       },
     },
     optimizeDeps: {
+      include: [
+        '@ckpack/vue-color',
+        '@tiptap/core',
+        '@tiptap/extension-code',
+        '@tiptap/extension-hard-break',
+        '@tiptap/extension-italic',
+        '@tiptap/extension-link',
+        '@tiptap/extension-mention',
+        '@tiptap/extension-placeholder',
+        '@tiptap/extension-strike',
+        '@tiptap/extension-task-list',
+        '@tiptap/extension-underline',
+        '@tiptap/html',
+        '@tiptap/pm/history',
+        '@tiptap/pm/markdown',
+        '@tiptap/pm/model',
+        '@tiptap/pm/state',
+        '@tiptap/pm/tables',
+        '@tiptap/pm/transform',
+        '@tiptap/pm/view',
+        '@tiptap/starter-kit',
+        '@tiptap/vue-3',
+        '@vue-flow/additional-components',
+        '@vue-flow/core',
+        '@vuelidate/core',
+        '@vuelidate/validators',
+        '@vueuse/integrations/useQRCode',
+        'company-email-validator',
+        'crossoriginworker',
+        'd3-scale',
+        'dagre',
+        'dayjs/plugin/utc',
+        'deep-object-diff',
+        'diff',
+        'embla-carousel-vue',
+        'emoji-mart-vue-fast/src',
+        'fflate',
+        'file-saver',
+        'fuse.js',
+        'httpsnippet',
+        'isomorphic-dompurify',
+        'jsbarcode',
+        'locale-codes',
+        'markdown-it',
+        'markdown-it-regexp',
+        'markdown-it-task-lists',
+        'marked',
+        'mime-lite',
+        'monaco-editor',
+        'monaco-editor/esm/vs/basic-languages/javascript/javascript',
+        'papaparse',
+        'rehype-sanitize',
+        'rehype-stringify',
+        'remark-parse',
+        'remark-rehype',
+        'sortablejs',
+        'splitpanes',
+        'tippy.js',
+        'tiptap-markdown',
+        'turndown',
+        'unified',
+        'v3-infinite-loading',
+        'validator/es/lib/isEmail',
+        'validator/lib/isMobilePhone',
+        'vue-advanced-cropper',
+        'vue-barcode-reader',
+        'vuedraggable',
+        'xlsx',
+        'youtube-vue3',
+      ],
       esbuildOptions: {
         define: {
           global: 'globalThis',
@@ -224,6 +304,7 @@ export default defineNuxtConfig({
   image: {
     dir: 'assets/',
   },
+
   imports: {
     dirs: ['./context', './utils/**', './lib', './composables/**', './store/**', './helpers'],
     imports: [
@@ -236,4 +317,6 @@ export default defineNuxtConfig({
       { name: 'storeToRefs', from: 'pinia' },
     ],
   },
+
+  compatibilityDate: '2024-12-04',
 })

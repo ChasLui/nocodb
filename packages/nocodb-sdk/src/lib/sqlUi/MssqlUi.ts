@@ -1,5 +1,6 @@
 import UITypes from '../UITypes';
 import { IDType } from './index';
+import { ColumnType } from '~/lib';
 
 const dbTypes = [
   'bigint',
@@ -177,6 +178,30 @@ export class MssqlUi {
         dtxs: '',
         altered: 1,
         uidt: UITypes.LastModifiedBy,
+        uip: '',
+        uicn: '',
+        system: true,
+      },
+      {
+        column_name: 'nc_order',
+        title: 'nc_order',
+        dt: 'decimal',
+        dtx: 'specificType',
+        ct: 'decimal(38,19)',
+        nrqd: true,
+        rqd: false,
+        ck: false,
+        pk: false,
+        un: false,
+        ai: false,
+        cdf: null,
+        clen: null,
+        np: 38,
+        ns: 19,
+        dtxp: '38,19',
+        dtxs: '',
+        altered: 1,
+        uidt: UITypes.Order,
         uip: '',
         uicn: '',
         system: true,
@@ -916,6 +941,7 @@ export class MssqlUi {
         ];
 
       case 'Formula':
+      case 'Button':
         return ['text', 'ntext', 'varchar', 'nvarchar'];
 
       case 'Rollup':
@@ -948,7 +974,6 @@ export class MssqlUi {
       case 'Geometry':
         return ['geometry'];
 
-      case 'Button':
       default:
         return dbTypes;
     }
@@ -967,6 +992,10 @@ export class MssqlUi {
       'ROUNDUP',
       'DATESTR',
     ];
+  }
+
+  static getCurrentDateDefault(_col: Partial<ColumnType>) {
+    return null;
   }
 
   static isEqual(dataType1: string, dataType2: string) {

@@ -47,24 +47,33 @@ npm install
 npm start
 ```
 
+## 宝塔面板Docker一键部署（推荐）
+
+1. 安装宝塔面板9.2.0及以上版本，前往 [宝塔面板](https://www.bt.cn/new/download.html?r=dk_nocodb) 官网，选择正式版的脚本下载安装
+
+2. 安装后登录宝塔面板，在左侧菜单栏中点击 `Docker`，首次进入会提示安装`Docker`服务，点击立即安装，按提示完成安装
+
+3. 安装完成后在应用商店中搜索`nocodb`，点击安装，配置域名等基本信息即可完成安装
+
 ## Docker 部署
 
 ```bash
 # 如果使用 SQLite 的话
-docker run -d --name nocodb \
--v "$(pwd)"/nocodb:/usr/app/data/ \
--p 8080:8080 \
-nocodb/nocodb:latest
-
+docker run -d \
+  --name noco \
+  -v "$(pwd)"/nocodb:/usr/app/data/ \
+  -p 8080:8080 \
+  nocodb/nocodb:latest
 
 # 如果使用 PostgreSQL 的话
-docker run -d --name nocodb-postgres \
--v "$(pwd)"/nocodb:/usr/app/data/ \
--p 8080:8080 \
--e NC_DB="pg://host.docker.internal:5432?u=root&p=password&d=d1" \
--e NC_AUTH_JWT_SECRET="569a1821-0a93-45e8-87ab-eb857f20a010" \
-nocodb/nocodb:latest
-
+docker run -d \
+  --name noco \
+  -v "$(pwd)"/nocodb:/usr/app/data/ \
+  -p 8080:8080 \
+  -e NC_DB="pg://host.docker.internal:5432?u=root&p=password&d=d1" \
+  -e NC_AUTH_JWT_SECRET="569a1821-0a93-45e8-87ab-eb857f20a010" \
+  nocodb/nocodb:latest
+  ```
 
 > 你可以通过在 0.10.6 以上的版本中挂载 `/usr/app/data/` 来持久化数据，否则你的数据会在重新创建容器后完全丢失。
 
@@ -77,7 +86,7 @@ nocodb/nocodb:latest
 ```bash
 git clone https://github.com/nocodb/nocodb
 # 如果使用 PostgreSQL 的话
-cd nocodb/docker-compose/pg
+cd nocodb/docker-compose/2_pg
 ```
 
 > 你可以通过在 0.10.6 以上的版本中挂载 `/usr/app/data/` 来持久化数据，否则你的数据会在重新创建容器后完全丢失。
@@ -92,9 +101,6 @@ cd nocodb/docker-compose/pg
 
 <a href="https://discord.gg/5RgZmkW" target="_blank">
 <img src="https://discordapp.com/api/guilds/661905455894888490/widget.png?style=banner3" alt="">
-</a>
-<a href="https://community.nocodb.com/" target="_blank">
-<img src="https://i2.wp.com/www.feverbee.com/wp-content/uploads/2018/07/logo-discourse.png" alt="">
 </a>
 
 # 截图

@@ -16,9 +16,9 @@ const defaultAuditLogsQuery = {
 export const useWorkspace = defineStore('workspaceStore', () => {
   const basesStore = useBases()
 
-  const { isUIAllowed } = useRoles()
-
   const collaborators = ref<any[] | null>()
+
+  const allCollaborators = ref<any[] | null>()
 
   const router = useRouter()
 
@@ -42,6 +42,8 @@ export const useWorkspace = defineStore('workspaceStore', () => {
   const isWorkspaceSettingsPageOpened = computed(() => route.value.name === 'index-typeOrId-settings')
 
   const isIntegrationsPageOpened = computed(() => route.value.name === 'index-typeOrId-integrations')
+
+  const isFeedPageOpened = computed(() => route.value.name === 'index-typeOrId-feed')
 
   const isWorkspaceLoading = ref(true)
   const isCollaboratorsLoading = ref(true)
@@ -226,13 +228,26 @@ export const useWorkspace = defineStore('workspaceStore', () => {
   }
 
   // Todo: write logic to navigate to integrations
-  const navigateToIntegrations = async (_?: string, cmdOrCtrl?: boolean) => {
+  const navigateToIntegrations = async (_?: string, cmdOrCtrl?: boolean, query: Record<string, string> = {}) => {
     if (cmdOrCtrl) {
-      await navigateTo('/nc/integrations', {
+      await navigateTo(
+        { path: '/nc/integrations', query },
+        {
+          open: navigateToBlankTargetOpenOption,
+        },
+      )
+    } else {
+      await navigateTo({ path: '/nc/integrations', query })
+    }
+  }
+
+  const navigateToFeed = async (_?: string, cmdOrCtrl?: boolean) => {
+    if (cmdOrCtrl) {
+      await navigateTo('/nc/feed', {
         open: navigateToBlankTargetOpenOption,
       })
     } else {
-      await navigateTo('/nc/integrations')
+      await navigateTo('/nc/feed')
     }
   }
 
@@ -242,38 +257,7 @@ export const useWorkspace = defineStore('workspaceStore', () => {
 
   const auditPaginationData = ref<PaginatedType>({ page: 1, pageSize: 25, totalRows: 0 })
 
-  const loadAudits = async (
-    _workspaceId?: string,
-    page: number = auditPaginationData.value.page!,
-    limit: number = auditPaginationData.value.pageSize!,
-  ) => {
-    try {
-      if (limit * (page - 1) > auditPaginationData.value.totalRows!) {
-        auditPaginationData.value.page = 1
-        page = 1
-      }
-
-      const { list, pageInfo } = isUIAllowed('workspaceAuditList')
-        ? await $api.utils.projectAuditList({
-            offset: limit * (page - 1),
-            limit,
-            ...auditLogsQuery.value,
-          })
-        : await $api.base.auditList(auditLogsQuery.value.baseId, {
-            offset: limit * (page - 1),
-            limit,
-            ...auditLogsQuery.value,
-          })
-
-      audits.value = list
-      auditPaginationData.value.totalRows = pageInfo.totalRows ?? 0
-    } catch (e) {
-      message.error(await extractSdkResponseErrorMsg(e))
-      audits.value = []
-      auditPaginationData.value.totalRows = 0
-      auditPaginationData.value.page = 1
-    }
-  }
+  const loadAudits = async (..._args: any) => {}
 
   function setLoadingState(isLoading = false) {
     isWorkspaceLoading.value = isLoading
@@ -296,6 +280,7 @@ export const useWorkspace = defineStore('workspaceStore', () => {
     removeCollaborator,
     updateCollaborator,
     collaborators,
+    allCollaborators,
     isInvitingCollaborators,
     isCollaboratorsLoading,
     addToFavourite,
@@ -323,10 +308,11 @@ export const useWorkspace = defineStore('workspaceStore', () => {
     auditLogsQuery,
     audits,
     auditPaginationData,
-
+    navigateToFeed,
     loadAudits,
     isIntegrationsPageOpened,
     navigateToIntegrations,
+    isFeedPageOpened,
   }
 })
 

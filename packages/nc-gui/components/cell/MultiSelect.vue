@@ -63,6 +63,10 @@ const { isPg, isMysql } = useBase()
 // temporary until it's add the option to column meta
 const tempSelectedOptsState = reactive<string[]>([])
 
+const isNewOptionCreateEnabled = computed(
+  () => !isPublic.value && !disableOptionCreation && isUIAllowed('fieldEdit') && !isMetaReadOnly.value && !isForm.value,
+)
+
 const options = computed<(SelectOptionType & { value?: string })[]>(() => {
   if (column?.value.colOptions) {
     const opts = column.value.colOptions
@@ -135,7 +139,7 @@ const vModel = computed({
     return selected
   },
   set: (val) => {
-    if (isOptionMissing.value && val.length && val[val.length - 1] === searchVal.value) {
+    if (isNewOptionCreateEnabled.value && isOptionMissing.value && val.length && val[val.length - 1] === searchVal.value) {
       return addIfMissingAndSave()
     }
     emit('update:modelValue', val.length === 0 ? null : val.join(','))
@@ -226,7 +230,7 @@ useSelectedCellKeyupListener(activeCell, (e) => {
         break
       }
       // toggle only if char key pressed
-      if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) && e.key?.length === 1 && !isDrawerOrModalExist()) {
+      if (!(e.metaKey || e.ctrlKey || e.altKey) && e.key?.length === 1 && !isDrawerOrModalExist()) {
         e.stopPropagation()
         isOpen.value = true
       }
@@ -235,9 +239,15 @@ useSelectedCellKeyupListener(activeCell, (e) => {
 })
 
 // close dropdown list on escape
-useSelectedCellKeyupListener(isOpen, (e) => {
-  if (e.key === 'Escape') isOpen.value = false
-})
+useSelectedCellKeyupListener(
+  isOpen,
+  (e) => {
+    if (e.key === 'Escape') isOpen.value = false
+  },
+  {
+    isGridCell: false,
+  },
+)
 
 const activeOptCreateInProgress = ref(0)
 
@@ -275,15 +285,16 @@ async function addIfMissingAndSave() {
         }
       }
 
-      await $api.dbTableColumn.update(
+      const data = await $api.dbTableColumn.update(
         (column.value as { fk_column_id?: string })?.fk_column_id || (column.value?.id as string),
         updatedColMeta,
       )
 
+      column.value.colOptions = data.columns.find((c) => c.id === column.value.id).colOptions
+
       activeOptCreateInProgress.value--
       if (!activeOptCreateInProgress.value) {
         vModel.value = [...vModel.value]
-        // await getMeta(column.value.fk_model_id!, true)
         tempSelectedOptsState.splice(0, tempSelectedOptsState.length)
       }
     } else {
@@ -367,6 +378,16 @@ const onFocus = () => {
 
   isOpen.value = true
 }
+
+watch(
+  () => active.value,
+  (newValue) => {
+    if (newValue) return
+
+    searchVal.value = ''
+    isOpen.value = false
+  },
+)
 </script>
 
 <template>
@@ -381,6 +402,7 @@ const onFocus = () => {
           v-for="op of options"
           :key="op.title"
           :value="op.title"
+          class="gap-2"
           :data-testid="`select-option-${column.title}-${location === 'filter' ? 'filter' : rowIndex}`"
           :class="`nc-select-option-${column.title}-${op.title}`"
         >
@@ -420,7 +442,7 @@ const onFocus = () => {
         :style="{
           'display': '-webkit-box',
           'max-width': '100%',
-          '-webkit-line-clamp': rowHeightTruncateLines(rowHeight),
+          '-webkit-line-clamp': rowHeightTruncateLines(rowHeight, true),
           '-webkit-box-orient': 'vertical',
           'overflow': 'hidden',
         }"
@@ -470,7 +492,7 @@ const onFocus = () => {
         :bordered="false"
         clear-icon
         :show-search="!isMobileMode"
-        :show-arrow="editAllowed && !readOnly"
+        :show-arrow="editAllowed && !readOnly && !searchVal"
         :open="isOpen && editAllowed"
         :disabled="readOnly || !editAllowed"
         :class="{ 'caret-transparent': !hasEditRoles }"
@@ -487,6 +509,7 @@ const onFocus = () => {
           v-for="op of options"
           :key="op.id || op.title"
           :value="op.title"
+          class="gap-2"
           :data-testid="`select-option-${column.title}-${location === 'filter' ? 'filter' : rowIndex}`"
           :class="`nc-select-option-${column.title}-${op.title}`"
           @click.stop
@@ -520,9 +543,7 @@ const onFocus = () => {
         </a-select-option>
 
         <a-select-option
-          v-if="
-            !isMetaReadOnly && searchVal && isOptionMissing && !isPublic && !disableOptionCreation && isUIAllowed('fieldEdit')
-          "
+          v-if="!isMetaReadOnly && searchVal && isOptionMissing && isNewOptionCreateEnabled"
           :key="searchVal"
           :value="searchVal"
         >
@@ -634,7 +655,7 @@ const onFocus = () => {
 }
 
 :deep(.ant-select-selection-search-input) {
-  @apply !text-xs;
+  @apply !text-small;
 }
 </style>
 

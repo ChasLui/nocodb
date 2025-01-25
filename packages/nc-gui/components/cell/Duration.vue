@@ -30,13 +30,31 @@ const durationType = computed(() => parseProp(column?.value?.meta)?.duration || 
 
 const durationPlaceholder = computed(() => durationOptions[durationType.value].title)
 
+const tempState = ref()
+
 const localState = computed({
-  get: () => convertMS2Duration(modelValue, durationType.value),
+  get: () => {
+    if (tempState.value === undefined) {
+      return convertMS2Duration(modelValue, durationType.value)
+    }
+
+    return tempState.value
+  },
   set: (val) => {
+    tempState.value = val
+
     isEdited.value = true
     const res = convertDurationToSeconds(val, durationType.value)
     if (res._isValid) {
       durationInMS.value = res._sec
+    }
+
+    if (!val) {
+      emit('update:modelValue', null)
+      isEdited.value = false
+      tempState.value = undefined
+    } else {
+      emit('update:modelValue', durationInMS.value)
     }
   },
 })
@@ -63,7 +81,10 @@ const submitDuration = () => {
   if (isEdited.value) {
     emit('update:modelValue', durationInMS.value)
   }
+
   isEdited.value = false
+
+  tempState.value = undefined
 }
 
 const isExpandedFormOpen = inject(IsExpandedFormOpenInj, ref(false))!
@@ -76,6 +97,7 @@ const focus: VNodeRef = (el) =>
 
 <template>
   <div class="duration-cell-wrapper">
+    <!-- eslint-disable vue/use-v-on-exact -->
     <input
       v-if="!readOnly && editEnabled"
       :ref="focus"
@@ -90,6 +112,7 @@ const focus: VNodeRef = (el) =>
       @keydown.right.stop
       @keydown.up.stop
       @keydown.delete.stop
+      @keydown.alt.stop
       @selectstart.capture.stop
       @mousedown.stop
     />

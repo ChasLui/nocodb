@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AppEvents,
+  isAIPromptCol,
   isLinksOrLTAR,
   isVirtualCol,
   ModelTypes,
@@ -8,6 +9,7 @@ import {
   UITypes,
 } from 'nocodb-sdk';
 import { pluralize, singularize } from 'inflection';
+import type { UserType } from 'nocodb-sdk';
 import type { LinksColumn, LinkToAnotherRecordColumn } from '~/models';
 import type { NcContext } from '~/interface/config';
 import { AppHooksService } from '~/services/app-hooks/app-hooks.service';
@@ -276,7 +278,9 @@ export class MetaDiffsService {
             UITypes.Formula,
             UITypes.QrCode,
             UITypes.Barcode,
-          ].includes(column.uidt)
+            UITypes.Button,
+          ].includes(column.uidt) ||
+          isAIPromptCol(column)
         ) {
           if (isLinksOrLTAR(column.uidt)) {
             virtualRelationColumns.push(column);
@@ -337,7 +341,7 @@ export class MetaDiffsService {
             .find((t) => t.table_name === childModel.table_name)
             .detectedChanges.push({
               type: MetaDiffType.TABLE_VIRTUAL_M2M_REMOVE,
-              msg: `Many to many removed(${relatedTable.tn} removed)`,
+              msg: `Many to many removed(${parentModel.table_name} removed)`,
               colId: relationCol.id,
               column: relationCol,
             });
@@ -647,7 +651,7 @@ export class MetaDiffsService {
 
   async baseMetaDiff(
     context: NcContext,
-    param: { baseId: string; sourceId: string },
+    param: { baseId: string; sourceId: string; user: UserType },
   ) {
     const base = await Base.getWithInfo(context, param.baseId);
     const source = await Source.get(context, param.sourceId);
@@ -662,9 +666,17 @@ export class MetaDiffsService {
 
   async syncBaseMeta(
     context: NcContext,
-    base: Base,
-    source: Source,
-    throwOnFail = false,
+    {
+      base,
+      source,
+      throwOnFail = false,
+      user,
+    }: {
+      base: Base;
+      source: Source;
+      throwOnFail?: boolean;
+      user: UserType;
+    },
   ) {
     if (source.is_meta) {
       if (throwOnFail) NcError.badRequest('Cannot sync meta source');
@@ -711,6 +723,7 @@ export class MetaDiffsService {
                   source,
                 ),
                 type: ModelTypes.TABLE,
+                user_id: user.id,
               });
 
               for (const column of columns) {
@@ -738,6 +751,7 @@ export class MetaDiffsService {
                 table_name: table_name,
                 title: getTableNameAlias(table_name, base.prefix, source),
                 type: ModelTypes.VIEW,
+                user_id: user.id,
               });
 
               for (const column of columns) {
@@ -909,12 +923,13 @@ export class MetaDiffsService {
   async metaDiffSync(context: NcContext, param: { baseId: string; req: any }) {
     const base = await Base.getWithInfo(context, param.baseId);
     for (const source of base.sources) {
-      await this.syncBaseMeta(context, base, source);
+      await this.syncBaseMeta(context, { base, source, user: param.req.user });
     }
 
     this.appHooksService.emit(AppEvents.META_DIFF_SYNC, {
       base,
       req: param.req,
+      context,
     });
 
     return true;
@@ -931,12 +946,18 @@ export class MetaDiffsService {
     const base = await Base.getWithInfo(context, param.baseId);
     const source = await Source.get(context, param.sourceId);
 
-    await this.syncBaseMeta(context, base, source, true);
+    await this.syncBaseMeta(context, {
+      base,
+      source,
+      throwOnFail: true,
+      user: param.req.user,
+    });
 
     this.appHooksService.emit(AppEvents.META_DIFF_SYNC, {
       base,
       source,
       req: param.req,
+      context,
     });
 
     return true;

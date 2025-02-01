@@ -52,6 +52,8 @@ const expandedFormDlg = ref(false)
 const expandedFormRow = ref<Row>()
 const expandedFormRowState = ref<Record<string, any>>()
 
+const groupByKeyId = computed(() => routeQuery.value.group)
+
 const expandedFormOnRowIdDlg = computed({
   get() {
     return !!routeQuery.value.rowId
@@ -62,6 +64,7 @@ const expandedFormOnRowIdDlg = computed({
         query: {
           ...routeQuery.value,
           rowId: undefined,
+          group: undefined,
         },
       })
       expandedFormRow.value = {}
@@ -70,17 +73,21 @@ const expandedFormOnRowIdDlg = computed({
   },
 })
 
-function expandForm(row: Row, state?: Record<string, any>, fromToolbar = false) {
+function expandForm(row: Row, state?: Record<string, any>, fromToolbar = false, groupByKey?: string) {
   const rowId = extractPkFromRow(row.row, meta.value?.columns as ColumnType[])
   expandedFormRowState.value = state
   if (rowId && !isPublic.value) {
     router.push({
       query: {
         ...routeQuery.value,
+        group: vGroup.value.key,
         rowId,
       },
     })
   } else {
+    if (groupByKey && groupByKey !== vGroup.value.key) {
+      return
+    }
     expandedFormRow.value = row
     expandedFormDlg.value = true
     skipRowRemovalOnCancel.value = !fromToolbar
@@ -269,17 +276,19 @@ async function deleteSelectedRowsWrapper() {
 </script>
 
 <template>
+  <!-- eslint-disable vue/no-restricted-v-bind -->
   <Table
     v-if="vGroup.rows"
     v-model:selected-all-records="selectedAllRecords"
     class="nc-group-table"
     :data="vGroup.rows"
+    :v-group="vGroup"
     :pagination-data="vGroup.paginationData"
     :load-data="async () => {}"
     :change-page="(p: number) => props.loadGroupPage(vGroup, p)"
     :call-add-empty-row="(addAfter?: number) => addEmptyRow(vGroup, addAfter)"
     :expand-form="expandForm"
-    :row-height="rowHeight"
+    :row-height-enum="rowHeight"
     :delete-row="deleteRow"
     :delete-selected-rows="deleteSelectedRowsWrapper"
     :delete-range-of-rows="deleteRangeOfRows"
@@ -304,8 +313,10 @@ async function deleteSelectedRowsWrapper() {
       @update:model-value="addRowExpandOnClose(expandedFormRow)"
     />
   </Suspense>
+
+  <!-- eslint-disable vue/eqeqeq -->
   <SmartsheetExpandedForm
-    v-if="expandedFormOnRowIdDlg && meta?.id"
+    v-if="expandedFormOnRowIdDlg && meta?.id && groupByKeyId === vGroup.key"
     v-model="expandedFormOnRowIdDlg"
     :row="expandedFormRow ?? { row: {}, oldRow: {}, rowMeta: {} }"
     :meta="meta"
@@ -321,5 +332,3 @@ async function deleteSelectedRowsWrapper() {
     @prev="goToPreviousRow"
   />
 </template>
-
-<style scoped lang="scss"></style>

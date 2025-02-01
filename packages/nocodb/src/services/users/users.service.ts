@@ -3,10 +3,10 @@ import { Injectable } from '@nestjs/common';
 import { AppEvents, OrgUserRoles, validatePassword } from 'nocodb-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import isEmail from 'validator/lib/isEmail';
-import { T } from 'nc-help';
 import * as ejs from 'ejs';
 import bcrypt from 'bcryptjs';
 import type {
+  MetaType,
   PasswordChangeReqType,
   PasswordForgotReqType,
   PasswordResetReqType,
@@ -14,6 +14,7 @@ import type {
   UserType,
 } from 'nocodb-sdk';
 import type { NcRequest } from '~/interface/config';
+import { T } from '~/utils';
 import { genJwt, setTokenCookie } from '~/services/users/helpers';
 import { NC_APP_SETTINGS } from '~/constants';
 import { AppHooksService } from '~/services/app-hooks/app-hooks.service';
@@ -21,12 +22,13 @@ import { validatePayload } from '~/helpers';
 import { MetaService } from '~/meta/meta.service';
 import { MetaTable, RootScopes } from '~/utils/globals';
 import Noco from '~/Noco';
-import { Store, User, UserRefreshToken } from '~/models';
+import { PresignedUrl, Store, User, UserRefreshToken } from '~/models';
 import { randomTokenString } from '~/helpers/stringHelpers';
 import NcPluginMgrv2 from '~/helpers/NcPluginMgrv2';
 import { NcError } from '~/helpers/catchError';
 import { BasesService } from '~/services/bases.service';
 import { extractProps } from '~/helpers/extractProps';
+import deepClone from '~/helpers/deepClone';
 
 @Injectable()
 export class UsersService {
@@ -58,20 +60,25 @@ export class UsersService {
       },
     );
 
+    await PresignedUrl.signMetaIconImage(user);
+
     return user;
   }
 
-  async insert(param: {
-    token_version: string;
-    firstname: any;
-    password: any;
-    salt: any;
-    email_verification_token: any;
-    roles: string;
-    email: string;
-    lastname: any;
-  }) {
-    return this.metaService.metaInsert2(
+  async insert(
+    param: {
+      token_version: string;
+      firstname: any;
+      password: any;
+      salt: any;
+      email_verification_token: any;
+      roles: string;
+      email: string;
+      lastname: any;
+    },
+    ncMeta = this.metaService || Noco.ncMeta,
+  ) {
+    return ncMeta.metaInsert2(
       RootScopes.ROOT,
       RootScopes.ROOT,
       MetaTable.USERS,
@@ -85,36 +92,55 @@ export class UsersService {
   async profileUpdate({
     id,
     params,
+    req,
   }: {
-    id: number;
+    id: string;
     params: {
       display_name?: string;
       avatar?: string;
+      meta?: MetaType;
     };
-  }) {
-    const updateObj = extractProps(params, ['display_name', 'avatar']);
-
-    return await User.update(id, updateObj);
-  }
-
-  async registerNewUserIfAllowed({
-    email,
-    salt,
-    password,
-    email_verification_token,
-    req,
-  }: {
-    email: string;
-    salt: any;
-    password;
-    email_verification_token;
     req: NcRequest;
   }) {
+    const oldUser = await User.get(id);
+    const updateObj = extractProps(params, ['display_name', 'avatar', 'meta']);
+
+    const user = await User.update(id, updateObj);
+
+    this.appHooksService.emit(AppEvents.USER_PROFILE_UPDATE, {
+      user: deepClone(user),
+      oldUser,
+      req,
+    });
+
+    await PresignedUrl.signMetaIconImage(user);
+
+    return user;
+  }
+
+  async registerNewUserIfAllowed(
+    {
+      email,
+      salt,
+      password,
+      email_verification_token,
+      req,
+      is_invite = false,
+    }: {
+      email: string;
+      salt: any;
+      password;
+      email_verification_token;
+      req: NcRequest;
+      is_invite?: boolean;
+    },
+    ncMeta = Noco.ncMeta,
+  ) {
     this.validateEmailPattern(email);
 
     let roles: string = OrgUserRoles.CREATOR;
 
-    const isFirstUser = await User.isFirst();
+    const isFirstUser = await User.isFirst(ncMeta);
 
     if (isFirstUser && process.env.NC_CLOUD !== 'true') {
       roles = `${OrgUserRoles.CREATOR},${OrgUserRoles.SUPER_ADMIN}`;
@@ -127,10 +153,12 @@ export class UsersService {
     } else {
       let settings: { invite_only_signup?: boolean } = {};
       try {
-        settings = JSON.parse((await Store.get(NC_APP_SETTINGS))?.value);
+        settings = JSON.parse(
+          (await Store.get(NC_APP_SETTINGS, undefined, ncMeta))?.value,
+        );
       } catch {}
 
-      if (settings?.invite_only_signup) {
+      if (settings?.invite_only_signup && !is_invite) {
         NcError.badRequest('Not allowed to signup, contact super admin.');
       } else {
         roles = OrgUserRoles.VIEWER;
@@ -138,19 +166,26 @@ export class UsersService {
     }
 
     const token_version = randomTokenString();
-    const user = await User.insert({
-      email,
-      salt,
-      password,
-      email_verification_token,
-      roles,
-      token_version,
-    });
+    const user = await User.insert(
+      {
+        email,
+        salt,
+        password,
+        email_verification_token,
+        roles,
+        token_version,
+      },
+      ncMeta,
+    );
 
     // if first user and super admin, create a base
     if (isFirstUser && process.env.NC_CLOUD !== 'true') {
       // todo: update swagger type
-      (user as any).createdProject = await this.createDefaultProject(user, req);
+      (user as any).createdProject = await this.createDefaultProject(
+        user,
+        req,
+        ncMeta,
+      );
     }
 
     // todo: update swagger type
@@ -206,7 +241,6 @@ export class UsersService {
 
     this.appHooksService.emit(AppEvents.USER_PASSWORD_CHANGE, {
       user: user,
-      ip: param.req?.clientIp,
       req: param.req,
     });
 
@@ -255,7 +289,6 @@ export class UsersService {
           }),
         );
       } catch (e) {
-        console.log(e);
         return NcError.badRequest(
           'Email Plugin is not found. Please contact administrators to configure it in App Store first.',
         );
@@ -263,7 +296,6 @@ export class UsersService {
 
       this.appHooksService.emit(AppEvents.USER_PASSWORD_FORGOT, {
         user: user,
-        ip: param.req?.clientIp,
         req: param.req,
       });
     } else {
@@ -346,7 +378,6 @@ export class UsersService {
 
     this.appHooksService.emit(AppEvents.USER_PASSWORD_RESET, {
       user: user,
-      ip: param.req?.clientIp,
       req: param.req,
     });
 
@@ -381,7 +412,6 @@ export class UsersService {
 
     this.appHooksService.emit(AppEvents.USER_EMAIL_VERIFICATION, {
       user: user,
-      ip: req?.clientIp,
       req,
     });
 
@@ -533,7 +563,6 @@ export class UsersService {
 
     this.appHooksService.emit(AppEvents.USER_SIGNUP, {
       user: user,
-      ip: param.req?.clientIp,
       req: param.req,
     });
 
@@ -576,12 +605,19 @@ export class UsersService {
     param.res.clearCookie('refresh_token');
   }
 
-  private async createDefaultProject(user: User, req: any) {
+  private async createDefaultProject(
+    user: User,
+    req: any,
+    ncMeta = Noco.ncMeta,
+  ) {
     // create new base for user
-    const base = await this.basesService.createDefaultBase({
-      user,
-      req,
-    });
+    const base = await this.basesService.createDefaultBase(
+      {
+        user,
+        req,
+      },
+      ncMeta,
+    );
 
     return base;
   }
@@ -599,11 +635,11 @@ export class UsersService {
 
     if (!user['token_version']) {
       user['token_version'] = randomTokenString();
-    }
 
-    await User.update(user.id, {
-      token_version: user['token_version'],
-    });
+      await User.update(user.id, {
+        token_version: user['token_version'],
+      });
+    }
 
     await UserRefreshToken.insert({
       token: refreshToken,

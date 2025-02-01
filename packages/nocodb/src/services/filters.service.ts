@@ -37,6 +37,7 @@ export class FiltersService {
       filter,
       hook,
       req: param.req,
+      context,
     });
     return filter;
   }
@@ -55,11 +56,15 @@ export class FiltersService {
       NcError.badRequest('Filter not found');
     }
 
+    const parentData = await filter.extractRelatedParentMetas(context);
+
     await Filter.delete(context, param.filterId);
 
     this.appHooksService.emit(AppEvents.FILTER_DELETE, {
       filter,
       req: param.req,
+      context,
+      ...parentData,
     });
 
     return true;
@@ -87,6 +92,7 @@ export class FiltersService {
       filter,
       view,
       req: param.req,
+      context,
     });
 
     return filter;
@@ -115,9 +121,14 @@ export class FiltersService {
       param.filter as Filter,
     );
 
+    const parentData = await filter.extractRelatedParentMetas(context);
+
     this.appHooksService.emit(AppEvents.FILTER_UPDATE, {
-      filter,
+      filter: { ...filter, ...param.filter },
+      oldFilter: filter,
       req: param.req,
+      ...parentData,
+      context,
     });
 
     return res;
@@ -134,10 +145,14 @@ export class FiltersService {
     return filter;
   }
 
-  async filterList(context: NcContext, param: { viewId: string }) {
-    const filter = await Filter.rootFilterList(context, {
-      viewId: param.viewId,
-    });
+  async filterList(
+    context: NcContext,
+    param: { viewId: string; includeAllFilters?: boolean },
+  ) {
+    const filter = await (param.includeAllFilters
+      ? Filter.allViewFilterList(context, { viewId: param.viewId })
+      : Filter.rootFilterList(context, { viewId: param.viewId }));
+
     return filter;
   }
 

@@ -1,7 +1,8 @@
+import { Logger } from '@nestjs/common';
 import type { BaseType, BoolType, MetaType } from 'nocodb-sdk';
 import type { DB_TYPES } from '~/utils/globals';
 import type { NcContext } from '~/interface/config';
-import { BaseUser, Source } from '~/models';
+import { BaseUser, CustomUrl, DataReflection, Source } from '~/models';
 import Noco from '~/Noco';
 import {
   CacheDelDirection,
@@ -14,6 +15,10 @@ import { extractProps } from '~/helpers/extractProps';
 import NocoCache from '~/cache/NocoCache';
 import { parseMetaProp, stringifyMetaProp } from '~/utils/modelUtils';
 import NcConnectionMgrv2 from '~/utils/common/NcConnectionMgrv2';
+import { cleanCommandPaletteCache } from '~/helpers/commandPaletteHelpers';
+import { NcError } from '~/helpers/catchError';
+
+const logger = new Logger('Base');
 
 export default class Base implements BaseType {
   public id: string;
@@ -24,9 +29,9 @@ export default class Base implements BaseType {
   public description: string;
   public meta: MetaType;
   public color: string;
-  public deleted: BoolType;
+  public deleted: BoolType | number;
   public order: number;
-  public is_meta = false;
+  public is_meta: boolean | number = false;
   public sources?: Source[];
   public linked_db_projects?: Base[];
 
@@ -34,6 +39,7 @@ export default class Base implements BaseType {
   uuid?: string;
   password?: string;
   roles?: string;
+  fk_custom_url_id?: string;
 
   constructor(base: Partial<Base>) {
     Object.assign(this, base);
@@ -68,6 +74,10 @@ export default class Base implements BaseType {
     if (insertObj.meta) {
       insertObj.meta = stringifyMetaProp(insertObj);
     }
+    // set default meta if not present
+    else if (!('meta' in insertObj)) {
+      insertObj.meta = '{"iconColor":"#36BFFF"}';
+    }
 
     const { id: baseId } = await ncMeta.metaInsert2(
       RootScopes.BASE,
@@ -94,6 +104,13 @@ export default class Base implements BaseType {
     }
 
     await NocoCache.del(CacheScope.INSTANCE_META);
+
+    await DataReflection.grantBase(base.fk_workspace_id, base.id, ncMeta);
+
+    cleanCommandPaletteCache(context.workspace_id).catch(() => {
+      logger.error('Failed to clean command palette cache');
+    });
+
     return this.getWithInfo(context, baseId, true, ncMeta).then(
       async (base) => {
         await NocoCache.appendToList(
@@ -272,20 +289,19 @@ export default class Base implements BaseType {
     baseId: string,
     ncMeta = Noco.ncMeta,
   ): Promise<any> {
+    const base = (await this.get(context, baseId, ncMeta)) as Base;
+
     await this.clearConnectionPool(context, baseId, ncMeta);
 
-    // get existing cache
-    const key = `${CacheScope.PROJECT}:${baseId}`;
-    const o = await NocoCache.get(key, CacheGetType.TYPE_OBJECT);
-    if (o) {
+    if (base) {
       // delete <scope>:<title>
       // delete <scope>:<uuid>
       // delete <scope>:ref:<titleOfId>
       await NocoCache.del([
-        `${CacheScope.PROJECT_ALIAS}:${o.title}`,
-        `${CacheScope.PROJECT_ALIAS}:${o.uuid}`,
-        `${CacheScope.PROJECT_ALIAS}:ref:${o.title}`,
-        `${CacheScope.PROJECT_ALIAS}:ref:${o.id}`,
+        `${CacheScope.PROJECT_ALIAS}:${base.title}`,
+        `${CacheScope.PROJECT_ALIAS}:${base.uuid}`,
+        `${CacheScope.PROJECT_ALIAS}:ref:${base.title}`,
+        `${CacheScope.PROJECT_ALIAS}:ref:${base.id}`,
       ]);
     }
 
@@ -296,6 +312,16 @@ export default class Base implements BaseType {
       `${CacheScope.PROJECT}:${baseId}`,
       CacheDelDirection.CHILD_TO_PARENT,
     );
+
+    CustomUrl.bulkDelete({ base_id: baseId }, ncMeta).catch(() => {
+      logger.error(`Failed to delete custom urls of baseId: ${baseId}`);
+    });
+
+    await DataReflection.revokeBase(base.fk_workspace_id, base.id, ncMeta);
+
+    cleanCommandPaletteCache(context.workspace_id).catch(() => {
+      logger.error('Failed to clean command palette cache');
+    });
 
     // set meta
     return await ncMeta.metaUpdate(
@@ -329,6 +355,11 @@ export default class Base implements BaseType {
       'roles',
     ]);
 
+    // stringify meta
+    if (updateObj.meta) {
+      updateObj.meta = stringifyMetaProp(updateObj);
+    }
+
     // get existing cache
     const key = `${CacheScope.PROJECT}:${baseId}`;
     let o = await NocoCache.get(key, CacheGetType.TYPE_OBJECT);
@@ -360,9 +391,11 @@ export default class Base implements BaseType {
       // set cache
       await NocoCache.set(key, o);
     }
+    cleanCommandPaletteCache(context.workspace_id).catch(() => {
+      logger.error('Failed to clean command palette cache');
+    });
 
-    // stringify meta
-    if (updateObj.meta) {
+    if ('meta' in updateObj) {
       updateObj.meta = stringifyMetaProp(updateObj);
     }
 
@@ -382,11 +415,22 @@ export default class Base implements BaseType {
     baseId,
     ncMeta = Noco.ncMeta,
   ): Promise<any> {
-    let base = await this.get(context, baseId, ncMeta);
+    const base = await ncMeta.metaGet2(
+      context.workspace_id,
+      context.base_id,
+      MetaTable.PROJECT,
+      baseId,
+    );
+
+    if (!base) {
+      NcError.baseNotFound(baseId);
+    }
+
     const users = await BaseUser.getUsersList(
       context,
       {
         base_id: baseId,
+        include_ws_deleted: true,
       },
       ncMeta,
     );
@@ -395,11 +439,16 @@ export default class Base implements BaseType {
       await BaseUser.delete(context, baseId, user.id, ncMeta);
     }
 
-    const sources = await Source.list(context, { baseId }, ncMeta);
+    const sources = await Source.list(
+      context,
+      { baseId, includeDeleted: true },
+      ncMeta,
+    );
     for (const source of sources) {
       await source.delete(context, ncMeta);
     }
-    base = await this.get(context, baseId, ncMeta);
+
+    await DataReflection.revokeBase(base.fk_workspace_id, base.id, ncMeta);
 
     if (base) {
       // delete <scope>:<uuid>
@@ -426,6 +475,14 @@ export default class Base implements BaseType {
         base_id: baseId,
       },
     );
+
+    CustomUrl.bulkDelete({ base_id: baseId }, ncMeta).catch(() => {
+      logger.error(`Failed to delete custom urls of baseId: ${baseId}`);
+    });
+
+    cleanCommandPaletteCache(context.workspace_id).catch(() => {
+      logger.error('Failed to clean command palette cache');
+    });
 
     return await ncMeta.metaDelete(
       context.workspace_id,

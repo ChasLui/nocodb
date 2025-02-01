@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
-import glob from 'glob';
+import { glob } from 'glob';
 import Debug from '../../util/Debug';
 import Emit from '../../util/emit';
 import * as fileHelp from '../../util/file.help';
@@ -386,6 +386,25 @@ export default class KnexMigratorv2 {
   async _initDbWithSql(source: Source) {
     const sqlClient = await this.getSqlClient(source);
     const connectionConfig = await source.getConnectionConfig();
+
+    try {
+      const dbExists = await sqlClient.hasDatabase({
+        databaseName: connectionConfig.connection.database,
+        ...(source.getConfig()?.schema
+          ? { schema: source.getConfig()?.schema }
+          : source.type === 'databricks'
+          ? { schema: connectionConfig.connection.schema }
+          : {}),
+      });
+
+      if (dbExists.data.value) {
+        this.emit(
+          `${connectionConfig.client}: DB already exists ${connectionConfig.connection.database}`,
+        );
+        return;
+      }
+    } catch (e) {}
+
     if (connectionConfig.client === 'oracledb') {
       this.emit(
         `${connectionConfig.client}: Creating DB if not exists ${connectionConfig.connection.user}`,
@@ -593,8 +612,8 @@ export default class KnexMigratorv2 {
           })
           .orderBy('id', 'asc');
       } else {
-        files = await promisify(glob)(args.upFilesPattern);
-        filesDown = await promisify(glob)(args.downFilesPattern);
+        files = await glob(args.upFilesPattern);
+        filesDown = await glob(args.downFilesPattern);
       }
 
       // get evolutions from sql
@@ -862,7 +881,7 @@ export default class KnexMigratorv2 {
           .orderBy('title', 'asc');
       } else {
         // get all evolutions from fs
-        files = await promisify(glob)(args.downFilesPattern);
+        files = await glob(args.downFilesPattern);
       }
       // get done evolutions from sql
       // const connection = this._getSqlConnectionFromDbAlias(

@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-/* eslint-disable @typescript-eslint/consistent-type-imports */
 import { OrderedWorkspaceRoles, WorkspaceUserRoles } from 'nocodb-sdk'
 
 const props = defineProps<{
@@ -7,6 +6,8 @@ const props = defineProps<{
 }>()
 
 const { workspaceRoles } = useRoles()
+
+const { user } = useGlobal()
 
 const workspaceStore = useWorkspace()
 
@@ -32,7 +33,9 @@ const userSearchText = ref('')
 
 const isAdminPanel = inject(IsAdminPanelInj, ref(false))
 
-const { isUIAllowed } = useRoles()
+const isOnlyOneOwner = computed(() => {
+  return collaborators.value?.filter((collab) => collab.roles === WorkspaceUserRoles.OWNER).length === 1
+})
 
 const { t } = useI18n()
 
@@ -77,26 +80,27 @@ const selectAll = computed({
 const updateCollaborator = async (collab: any, roles: WorkspaceUserRoles) => {
   if (!currentWorkspace.value || !currentWorkspace.value.id) return
 
-  try {
-    await _updateCollaborator(collab.id, roles, currentWorkspace.value.id)
-    message.success('Successfully updated user role')
+  const res = await _updateCollaborator(collab.id, roles, currentWorkspace.value.id)
+  if (!res) return
+  message.success(t('msg.info.userRoleUpdated'))
 
-    collaborators.value?.forEach((collaborator) => {
-      if (collaborator.id === collab.id) {
-        collaborator.roles = roles
-      }
-    })
-  } catch (e: any) {
-    message.error(await extractSdkResponseErrorMsg(e))
-  }
+  collaborators.value?.forEach((collaborator) => {
+    if (collaborator.id === collab.id) {
+      collaborator.roles = roles
+    }
+  })
 }
+
+const isOwnerOrCreator = computed(() => {
+  return workspaceRoles.value[WorkspaceUserRoles.OWNER] || workspaceRoles.value[WorkspaceUserRoles.CREATOR]
+})
 
 const accessibleRoles = computed<WorkspaceUserRoles[]>(() => {
   const currentRoleIndex = OrderedWorkspaceRoles.findIndex(
     (role) => workspaceRoles.value && Object.keys(workspaceRoles.value).includes(role),
   )
   if (currentRoleIndex === -1) return []
-  return OrderedWorkspaceRoles.slice(currentRoleIndex + 1).filter((r) => r)
+  return OrderedWorkspaceRoles.slice(currentRoleIndex).filter((r) => r)
 })
 
 onMounted(async () => {
@@ -163,17 +167,27 @@ const columns = [
 const customRow = (_record: Record<string, any>, recordIndex: number) => ({
   class: `${selected[recordIndex] ? 'selected' : ''} last:!border-b-0`,
 })
+
+const isDeleteOrUpdateAllowed = (user) => {
+  return !(isOnlyOneOwner.value && user.roles === WorkspaceUserRoles.OWNER)
+}
 </script>
 
 <template>
-  <div class="nc-collaborator-table-container py-6 h-[calc(100vh-92px)] max-w-350 px-1 flex flex-col gap-6">
+  <div
+    class="nc-collaborator-table-container py-6 max-w-350 px-6 flex flex-col gap-6"
+    :class="{
+      'h-[calc(100vh-144px)]': isAdminPanel,
+      'h-[calc(100vh-92px)]': !isAdminPanel,
+    }"
+  >
     <div class="w-full flex items-center justify-between gap-3">
       <a-input
         v-model:value="userSearchText"
         allow-clear
         :disabled="isCollaboratorsLoading"
         class="nc-input-border-on-value !max-w-90 !h-8 !px-3 !py-1 !rounded-lg"
-        placeholder="Search members"
+        :placeholder="$t('title.searchMembers')"
       >
         <template #prefix>
           <GeneralIcon icon="search" class="mr-2 h-4 w-4 text-gray-500 group-hover:text-black" />
@@ -215,7 +229,7 @@ const customRow = (_record: Record<string, any>, recordIndex: number) => ({
           </template>
 
           <div v-if="column.key === 'email'" class="w-full flex gap-3 items-center">
-            <GeneralUserIcon size="base" :email="record.email" class="flex-none" />
+            <GeneralUserIcon size="base" :user="record" class="flex-none" />
             <div class="flex flex-col flex-1 max-w-[calc(100%_-_44px)]">
               <div class="flex gap-3">
                 <NcTooltip class="truncate max-w-full text-gray-800 capitalize font-semibold" show-on-truncate-only>
@@ -234,7 +248,9 @@ const customRow = (_record: Record<string, any>, recordIndex: number) => ({
             </div>
           </div>
           <div v-if="column.key === 'role'">
-            <template v-if="accessibleRoles.includes(record.roles as WorkspaceUserRoles)">
+            <template
+              v-if="isDeleteOrUpdateAllowed(record) && isOwnerOrCreator && accessibleRoles.includes(record.roles as WorkspaceUserRoles)"
+            >
               <RolesSelector
                 :description="false"
                 :on-role-change="(role) => updateCollaborator(record, role as WorkspaceUserRoles)"
@@ -259,34 +275,33 @@ const customRow = (_record: Record<string, any>, recordIndex: number) => ({
           </div>
 
           <div v-if="column.key === 'action'">
-            <NcDropdown v-if="record.roles !== WorkspaceUserRoles.OWNER">
+            <NcDropdown v-if="isOwnerOrCreator || record.id === user.id">
               <NcButton size="small" type="secondary">
-                <component :is="iconMap.threeDotVertical" />
+                <component :is="iconMap.ncMoreVertical" />
               </NcButton>
               <template #overlay>
-                <NcMenu>
+                <NcMenu variant="small">
                   <template v-if="isAdminPanel">
                     <NcMenuItem data-testid="nc-admin-org-user-delete">
                       <GeneralIcon class="text-gray-800" icon="signout" />
                       <span>{{ $t('labels.signOutUser') }}</span>
                     </NcMenuItem>
 
-                    <a-menu-divider class="my-1.5" />
+                    <NcDivider />
                   </template>
-                  <NcMenuItem
-                    v-if="isUIAllowed('transferWorkspaceOwnership')"
-                    data-testid="nc-admin-org-user-assign-admin"
-                    @click="updateCollaborator(record, WorkspaceUserRoles.OWNER)"
-                  >
-                    <GeneralIcon class="text-gray-800" icon="user" />
-                    <span>{{ $t('labels.assignAs') }}</span>
-                    <RolesBadge :border="false" :show-icon="false" role="owner" />
-                  </NcMenuItem>
-
-                  <NcMenuItem class="!text-red-500 !hover:bg-red-50" @click="removeCollaborator(record.id, currentWorkspace?.id)">
-                    <MaterialSymbolsDeleteOutlineRounded />
-                    Remove user
-                  </NcMenuItem>
+                  <NcTooltip :disabled="!isOnlyOneOwner || record.roles !== WorkspaceUserRoles.OWNER">
+                    <template #title>
+                      {{ $t('tooltip.leaveWorkspace') }}
+                    </template>
+                    <NcMenuItem
+                      :disabled="!isDeleteOrUpdateAllowed(record)"
+                      :class="{ '!text-red-500 !hover:bg-red-50': isDeleteOrUpdateAllowed(record) }"
+                      @click="removeCollaborator(record.id, currentWorkspace?.id)"
+                    >
+                      <MaterialSymbolsDeleteOutlineRounded />
+                      {{ record.id === user.id ? t('activity.leaveWorkspace') : t('activity.removeUser') }}
+                    </NcMenuItem>
+                  </NcTooltip>
                 </NcMenu>
               </template>
             </NcDropdown>
@@ -311,10 +326,6 @@ const customRow = (_record: Record<string, any>, recordIndex: number) => ({
 </template>
 
 <style scoped lang="scss">
-:deep(.ant-input::placeholder) {
-  @apply text-gray-500;
-}
-
 .badge-text {
   @apply text-[14px] pt-1 text-center;
 }

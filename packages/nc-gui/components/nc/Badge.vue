@@ -3,7 +3,7 @@ const props = withDefaults(
   defineProps<{
     color?: string
     border?: boolean
-    size?: 'sm' | 'md' | 'lg'
+    size?: 'xs' | 'sm' | 'md' | 'lg'
     rounded?: 'sm' | 'md' | 'lg'
   }>(),
   {
@@ -24,8 +24,11 @@ const props = withDefaults(
       'border-yellow-500 bg-yellow-100': props.color === 'yellow',
       'border-red-500 bg-red-100': props.color === 'red',
       'border-maroon-500 bg-maroon-50': props.color === 'maroon',
+      'border-gray-500 bg-gray-50': props.color === 'grey',
+      'bg-brand-50 text-brand-500': props.color === 'brand',
       'border-gray-300': !props.color,
       'border-1': props.border,
+      'h-5': props.size === 'xs',
       'h-6': props.size === 'sm',
       'h-8': props.size === 'md',
       'h-10': props.size === 'lg',

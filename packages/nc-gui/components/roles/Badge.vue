@@ -9,7 +9,8 @@ const props = withDefaults(
     border?: boolean
     showIcon?: boolean
     iconOnly?: boolean
-    size?: 'sm' | 'md' | 'lg'
+    size?: 'xs' | 'sm' | 'md' | 'lg'
+    disabled?: boolean
   }>(),
   {
     clickable: false,
@@ -33,7 +34,7 @@ const roleProperties = computed(() => {
   const icon = RoleIcons[role]
   const label = RoleLabels[role]
   return {
-    color,
+    color: props.disabled ? 'grey' : color,
     icon,
     label,
   }
@@ -58,6 +59,7 @@ const roleProperties = computed(() => {
           'text-yellow-700': roleProperties.color === 'yellow',
           'text-red-700': roleProperties.color === 'red',
           'text-maroon-700': roleProperties.color === 'maroon',
+          'text-gray-400': !roleProperties.color === 'grey',
           'text-gray-300': !roleProperties.color,
           sizeSelect,
         }"
@@ -78,5 +80,3 @@ const roleProperties = computed(() => {
     -->
   </div>
 </template>
-
-<style scoped lang="scss"></style>

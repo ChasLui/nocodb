@@ -20,8 +20,6 @@ test.describe('View', () => {
     toolbar = toolbar = dashboard.kanban.toolbar;
     topbar = dashboard.kanban.topbar;
 
-    // close 'Team & Auth' tab
-    await dashboard.closeTab({ title: 'Team & Auth' });
     await dashboard.treeView.openTable({ title: 'Film' });
 
     if (isSqlite(context)) {
@@ -229,7 +227,7 @@ test.describe('View', () => {
 
     await dashboard.viewSidebar.copyView({ title: 'Film Kanban' });
     await dashboard.viewSidebar.verifyView({
-      title: 'Kanban',
+      title: 'Film Kanban copy',
       index: 1,
     });
     const kanban = dashboard.kanban;
@@ -255,12 +253,12 @@ test.describe('View', () => {
       });
 
     await dashboard.viewSidebar.changeViewIcon({
-      title: 'Kanban',
+      title: 'Film Kanban copy',
       icon: 'american-football',
       iconDisplay: '🏈',
     });
 
-    await dashboard.viewSidebar.deleteView({ title: 'Kanban' });
+    await dashboard.viewSidebar.deleteView({ title: 'Film Kanban copy' });
     ///////////////////////////////////////////////
 
     await dashboard.viewSidebar.openView({ title: 'Film Kanban' });

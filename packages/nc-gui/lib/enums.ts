@@ -1,4 +1,6 @@
-export { ClientType } from 'nocodb-sdk'
+import { ViewLockType } from 'nocodb-sdk'
+
+export { ClientType, IntegrationCategoryType, SyncDataType } from 'nocodb-sdk'
 
 export enum Language {
   ar = 'العربية',
@@ -12,15 +14,17 @@ export enum Language {
   fa = 'فارسی',
   fi = 'Suomalainen',
   fr = 'Français',
-  he = 'עִברִית',
+  he = 'עברית',
   hi = 'हिन्दी',
   hr = 'Hrvatski',
   hu = 'Magyar',
   id = 'Bahasa Indonesia',
   it = 'Italiano',
   ja = '日本語',
+  kn = 'ಕನ್ನಡ',
   ko = '한국어',
   lv = 'Latviešu',
+  ml = 'മലയാളം',
   nl = 'Nederlandse',
   no = 'Norsk',
   pl = 'Polski',
@@ -39,7 +43,7 @@ export enum Language {
 }
 
 export enum LanguageAlias {
-  zn_CN = 'zh-Hans',
+  zh_CN = 'zh-Hans',
   zh_TW = 'zh-Hant',
 }
 
@@ -48,11 +52,7 @@ export enum NavigateDir {
   PREV,
 }
 
-export enum LockType {
-  Personal = 'personal',
-  Locked = 'locked',
-  Collaborative = 'collaborative',
-}
+export { ViewLockType as LockType }
 
 export enum TabType {
   TABLE = 'table',
@@ -77,6 +77,16 @@ export enum SmartsheetStoreEvents {
   GROUP_BY_ADD = 'group-by-add',
   GROUP_BY_REMOVE = 'group-by-remove',
   FILTER_ADD = 'filter-add',
+  CELL_SELECTED = 'cell-selected',
+}
+
+export enum SmartsheetScriptActions {
+  UPDATE_PROGRESS = 'update-progress',
+  RESET_PROGRESS = 'reset-progress',
+  ACTION = 'action',
+
+  RELOAD_VIEW = 'reload-view',
+  RELOAD_ROW = 'reload-row',
 }
 
 export enum DataSourcesSubTab {
@@ -171,79 +181,17 @@ export enum AuditLogsDateRange {
 }
 
 export enum ExtensionsEvents {
+  ADD = 'add',
   DUPLICATE = 'duplicate',
+  CLEARDATA = 'clearData',
 }
 
 export enum IntegrationStoreEvents {
   INTEGRATION_ADD = 'integration-add',
 }
 
-// Move this to nocodb-sdk
-export enum SyncDataType {
-  // Database
-  SNOWFLAKE = 'snowflake',
-  MICROSOFT_ACCESS = 'microsoft-access',
-  TABLEAU = 'tableau',
-  ORACLE = 'oracle',
-  // Communication
-  SLACK = 'slack',
-  DISCORD = 'discord',
-  TWILLO = 'twillo',
-  MICROSOFT_OUTLOOK = 'microsoft-outlook',
-  MICROSOFT_TEAMS = 'microsoft-teams',
-  TELEGRAM = 'telegram',
-  GMAIL = 'gmail',
-  WHATSAPP = 'whatsapp',
-  // Project Management
-  ASANA = 'asana',
-  JIRA = 'jira',
-  MIRO = 'miro',
-  TRELLO = 'trello',
-  // CRM
-  SALESFORCE = 'salesforce',
-  PIPEDRIVE = 'pipedrive',
-  MICROSOFT_DYNAMICS_365 = 'microsoft-dynamics-365',
-  ZOHO_CRM = 'zoho-crm',
-  // Marketing
-  HUBSPOT = 'hubspot',
-  MAILCHIMP = 'mailchimp',
-  SURVEYMONKEY = 'surveymonkey',
-  TYPEFORM = 'typeform',
-  // ATS
-  WORKDAY = 'workday',
-  GREENHOUSE = 'greenhouse',
-  LEVER = 'lever',
-  // Development
-  GITHUB = 'github',
-  GITLAB = 'gitlab',
-  BITBUCKET = 'bitbucket',
-  // Finance
-  STRIPE = 'stripe',
-  QUICKBOOKS = 'quickbooks',
-  // Ticketing
-  INTERCOM = 'intercom',
-  ZENDESK = 'zendesk',
-  // Storage
-  BOX = 'box',
-  GOOGLE_DRIVE = 'google-drive',
-  DROPBOX = 'dropbox',
-  // Others
-  APPLE_NUMBERS = 'apple-numbers',
-  GOOGLE_CALENDAR = 'google-calendar',
-  MICROSOFT_EXCEL = 'microsoft-excel',
-  GOOGLE_SHEETS = 'google-sheets',
-}
-
-export enum IntegrationCategoryType {
-  DATABASE = 'database',
-  COMMUNICATION = 'communication',
-  PROJECT_MANAGEMENT = 'project-management',
-  CRM = 'crm',
-  MARKETING = 'marketing',
-  ATS = 'ats',
-  DEVELOPMENT = 'development',
-  FINANCE = 'finance',
-  TICKETING = 'ticketing',
-  STORAGE = 'storage',
-  OTHERS = 'others',
+export enum WorkspaceIconType {
+  IMAGE = 'IMAGE',
+  EMOJI = 'EMOJI',
+  ICON = 'ICON',
 }

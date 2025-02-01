@@ -1,12 +1,12 @@
 import type { CSSProperties } from '@vue/runtime-dom'
 
 import type {
-  AuditOperationTypes,
   BaseType,
   ColumnType,
   FilterType,
   MetaType,
   PaginatedType,
+  PublicAttachmentScope,
   Roles,
   RolesObj,
   TableType,
@@ -30,6 +30,7 @@ interface User {
   base_id?: string
   display_name?: string | null
   featureFlags?: Record<string, boolean>
+  meta?: MetaType
 }
 
 interface ProjectMetaInfo {
@@ -74,6 +75,17 @@ interface Row {
   row: Record<string, any>
   oldRow: Record<string, any>
   rowMeta: {
+    // Used in InfiniteScroll Grid View
+    rowIndex?: number
+    isLoading?: boolean
+    isValidationFailed?: boolean
+    isRowOrderUpdated?: boolean
+    isDragging?: boolean
+    rowProgress?: {
+      message: string
+      progress: number
+    }
+
     new?: boolean
     selected?: boolean
     commentCount?: number
@@ -93,11 +105,16 @@ interface Row {
     id?: string
     position?: string
     dayIndex?: number
-
     overLapIteration?: number
     numberOfOverlaps?: number
     minutes?: number
+    recordIndex?: number // For week spanning records in month view
+    maxSpanning?: number
   }
+}
+
+interface Attachment {
+  url: string
 }
 
 interface CalendarRangeType {
@@ -145,9 +162,9 @@ interface SharedView {
   meta: SharedViewMeta
 }
 
-type importFileList = (UploadFile & { data: string | ArrayBuffer })[]
+type importFileList = (UploadFile & { data: string | ArrayBuffer; encoding?: string })[]
 
-type streamImportFileList = UploadFile[]
+type streamImportFileList = (UploadFile & { encoding?: string })[]
 
 type Nullable<T> = { [K in keyof T]: T[K] | null }
 
@@ -236,14 +253,37 @@ interface FormFieldsLimitOptionsType {
 interface ImageCropperConfig {
   stencilProps?: {
     aspectRatio?: number
+    /**
+     * It can be used to force the cropper fills all visible area by default:
+     * @default true
+     */
+    fillDefault?: boolean
+    circlePreview?: boolean
   }
   minHeight?: number
   minWidth?: number
   imageRestriction?: 'fill-area' | 'fit-area' | 'stencil' | 'none'
 }
 
+interface ImageCropperProps {
+  imageConfig: {
+    src: string
+    type: string
+    name: string
+  }
+  cropperConfig: ImageCropperConfig
+  uploadConfig?: {
+    path?: string
+    scope?: PublicAttachmentScope
+    // filesize in bytes
+    maxFileSize?: number
+  }
+  showCropper: boolean
+}
+
 interface AuditLogsQuery {
-  type?: AuditOperationTypes
+  type?: string[]
+  workspaceId?: string
   baseId?: string
   sourceId?: string
   user?: string
@@ -257,7 +297,7 @@ interface AuditLogsQuery {
   }
 }
 
-interface NcTableColumnProps {
+interface NcTableColumnProps<T extends object = Record<string, any>> {
   key: 'name' | 'action' | string
   // title is column header cell value and we can also pass i18n value as this is just used to render in UI
   title: string
@@ -271,13 +311,51 @@ interface NcTableColumnProps {
   justify?: 'justify-center' | 'justify-start' | 'justify-end'
   showOrderBy?: boolean
   // dataIndex is used as key to extract data from row object
-  dataIndex?: string
+  dataIndex?: keyof T | (string & Record<never, never>)
   // name can be used as value, which will be used to display in header if title is absent and in data-test-id
   name?: string
   [key: string]: any
 }
 
+interface ProductFeedItem {
+  Id: string
+  Title: string
+  Description: string
+  ['Feed Source']: 'Youtube' | 'Github' | 'All' | 'Cloud'
+  Url: string
+  Tags?: string
+  ['Published Time']: string
+  Image?: string | null
+}
+
 type SordDirectionType = 'asc' | 'desc' | undefined
+
+type NestedArray<T> = T | NestedArray<T>[]
+
+interface ViewActionState {
+  viewProgress: {
+    progress: number
+    message?: string
+  } | null
+  rowProgress: Map<
+    string,
+    {
+      progress: number
+      message?: string
+    }
+  >
+  cellProgress: Map<
+    string,
+    Map<
+      string,
+      {
+        progress: number
+        message?: string
+        icon?: keyof typeof iconMap
+      }
+    >
+  >
+}
 
 export type {
   User,
@@ -309,7 +387,12 @@ export type {
   CalendarRangeType,
   FormFieldsLimitOptionsType,
   ImageCropperConfig,
+  ImageCropperProps,
   AuditLogsQuery,
   NcTableColumnProps,
   SordDirectionType,
+  ProductFeedItem,
+  Attachment,
+  NestedArray,
+  ViewActionState,
 }

@@ -19,6 +19,8 @@ const emit = defineEmits(['update:modelValue', 'save', 'navigate', 'update:editE
 
 const column = toRef(props, 'column')
 
+const meta = inject(MetaInj, ref())
+
 const active = toRef(props, 'active', false)
 
 const readOnly = toRef(props, 'readOnly', false)
@@ -26,6 +28,8 @@ const readOnly = toRef(props, 'readOnly', false)
 provide(ColumnInj, column)
 
 const editEnabled = useVModel(props, 'editEnabled', emit)
+
+const localEditEnabled = ref(false)
 
 provide(EditModeInj, editEnabled)
 
@@ -51,11 +55,23 @@ const { currentRow } = useSmartsheetRowStoreOrThrow()
 
 const { sqlUis } = storeToRefs(useBase())
 
-const sqlUi = ref(
-  column.value?.source_id && sqlUis.value[column.value?.source_id]
-    ? sqlUis.value[column.value?.source_id]
-    : Object.values(sqlUis.value)[0],
+const { generatingRows, generatingColumns } = useNocoAi()
+
+const { showNull } = useGlobal()
+
+const pk = computed(() => {
+  if (!meta.value?.columns) return
+  return extractPkFromRow(currentRow.value?.row, meta.value.columns)
+})
+
+const isGenerating = computed(
+  () =>
+    pk.value && column.value.id && generatingRows.value.includes(pk.value) && generatingColumns.value.includes(column.value.id),
 )
+
+const sourceId = meta.value?.source_id || column.value?.source_id
+
+const sqlUi = ref(sourceId && sqlUis.value[sourceId] ? sqlUis.value[sourceId] : Object.values(sqlUis.value)[0])
 
 const abstractType = computed(() => column.value && sqlUi.value.getAbstractType(column.value))
 
@@ -123,76 +139,307 @@ const onContextmenu = (e: MouseEvent) => {
     e.stopPropagation()
   }
 }
+
+const showCurrentDateOption = computed(() => {
+  if (!isEditColumnMenu.value || (!isDate(column.value, abstractType.value) && !isDateTime(column.value, abstractType.value)))
+    return false
+
+  return sqlUi.value?.getCurrentDateDefault?.(column.value) ? true : 'disabled'
+})
+
+const currentDate = () => {
+  vModel.value = sqlUi.value?.getCurrentDateDefault?.(column.value)
+}
+
+const isPrimaryCol = computed(() => isPrimary(column.value))
+
+const isPrimaryKeyCol = computed(() => isPrimaryKey(column.value))
+
+const cellType = computed(() => {
+  if (isAI(column.value)) return 'ai'
+  if (isTextArea(column.value)) return 'textarea'
+  if (isGeoData(column.value)) return 'geoData'
+  if (isBoolean(column.value, abstractType.value)) return 'checkbox'
+  if (isAttachment(column.value)) return 'attachment'
+  if (isSingleSelect(column.value)) return 'singleSelect'
+  if (isMultiSelect(column.value)) return 'multiSelect'
+  if (isDate(column.value, abstractType.value)) return 'datePicker'
+  if (isYear(column.value, abstractType.value)) return 'yearPicker'
+  if (isDateTime(column.value, abstractType.value)) return 'dateTimePicker'
+  if (isTime(column.value, abstractType.value)) return 'timePicker'
+  if (isRating(column.value)) return 'rating'
+  if (isDuration(column.value)) return 'duration'
+  if (isEmail(column.value)) return 'email'
+  if (isURL(column.value)) return 'url'
+  if (isPhoneNumber(column.value)) return 'phoneNumber'
+  if (isPercent(column.value)) return 'percent'
+  if (isCurrency(column.value)) return 'currency'
+  if (isUser(column.value)) return 'user'
+  if (isDecimal(column.value)) return 'decimal'
+  if (isFloat(column.value, abstractType.value)) return 'float'
+  if (isString(column.value, abstractType.value)) return 'text'
+  if (isInt(column.value, abstractType.value)) return 'integer'
+  if (isJSON(column.value)) return 'json'
+  return 'text'
+})
+
+const showNullComponent = computed(() => {
+  return (readOnly.value || !editEnabled.value) && vModel.value === null && isShowNullField(column.value) && showNull.value
+})
+
+const showReadonlyField = computed(() => {
+  switch (cellType.value) {
+    case 'currency': {
+      return !((!readOnly.value && editEnabled.value) || (isForm && !isEditColumnMenu.value && editEnabled.value))
+    }
+
+    case 'percent': {
+      return !(
+        !readOnly.value &&
+        editEnabled.value &&
+        (isExpandedFormOpen.value ? localEditEnabled.value || !parseProp(column.value?.meta).is_progress : true)
+      )
+    }
+
+    case 'checkbox':
+    case 'rating': {
+      return readOnly.value
+    }
+
+    case 'geoData': {
+      return readOnly.value || !active.value
+    }
+
+    case 'singleSelect':
+    case 'multiSelect':
+    case 'user': {
+      return readOnly.value || !(active.value || editEnabled.value || isForm.value)
+    }
+
+    case 'datePicker':
+    case 'dateTimePicker':
+    case 'timePicker':
+    case 'yearPicker': {
+      return readOnly.value || !(active.value || editEnabled.value)
+    }
+
+    default: {
+      return readOnly.value || !editEnabled.value
+    }
+  }
+})
+
+const showLockedOverlay = computed(() => {
+  return (
+    ((isPublic.value && readOnly.value && !isForm.value) || isSystemColumn(column.value)) &&
+    cellType.value !== 'attachment' &&
+    cellType.value !== 'textarea' &&
+    cellType.value !== 'ai' &&
+    cellType.value !== 'json'
+  )
+})
+
+const cellClassName = computed(() => {
+  let className = `nc-cell-${(column.value?.uidt || 'default').toLowerCase()}`
+
+  if (isPrimaryCol.value && !props.virtual && !isForm.value && !isCalendar.value) {
+    className += ' nc-display-value-cell'
+  }
+
+  if (
+    isGrid.value &&
+    isNumericField.value &&
+    !isEditColumnMenu.value &&
+    !isForm.value &&
+    !isExpandedFormOpen.value &&
+    cellType.value !== 'rating' &&
+    cellType.value !== 'yearPicker'
+  ) {
+    className += ' nc-grid-numeric-cell-right'
+  }
+
+  if (
+    !isEditColumnMenu.value &&
+    isForm.value &&
+    !props.virtual &&
+    cellType.value !== 'attachment' &&
+    cellType.value !== 'textarea' &&
+    cellType.value !== 'ai'
+  ) {
+    className += ' h-10'
+  }
+
+  if ((isForm.value && isNumericField.value && isExpandedFormOpen.value) || isEditColumnMenu.value) {
+    className += ' nc-grid-numeric-cell-left'
+  }
+
+  if (cellType.value === 'textarea' && (isForm.value || isSurveyForm.value)) {
+    className += ' !min-h-30'
+  }
+
+  if (cellType.value === 'ai') {
+    className += ' nc-cell-longtext-ai'
+  }
+
+  return className
+})
 </script>
 
 <template>
   <div
-    :class="[
-      `nc-cell-${(column?.uidt || 'default').toLowerCase()}`,
-      {
-        'nc-display-value-cell': isPrimary(column) && !props.virtual && !isForm && !isCalendar,
-        'nc-grid-numeric-cell-right':
-          isGrid &&
-          isNumericField &&
-          !isEditColumnMenu &&
-          !isForm &&
-          !isExpandedFormOpen &&
-          !isRating(column) &&
-          !isYear(column, abstractType),
-        'h-10': !isEditColumnMenu && isForm && !isAttachment(column) && !isTextArea(column) && !isJSON(column) && !props.virtual,
-        'nc-grid-numeric-cell-left': (isForm && isNumericField && isExpandedFormOpen) || isEditColumnMenu,
-        '!min-h-30': isTextArea(column) && (isForm || isSurveyForm),
-      },
-    ]"
+    :class="cellClassName"
     class="nc-cell w-full h-full relative"
     @contextmenu="onContextmenu"
     @keydown.enter.exact="navigate(NavigateDir.NEXT, $event)"
     @keydown.shift.enter.exact="navigate(NavigateDir.PREV, $event)"
   >
     <template v-if="column">
-      <LazyCellTextArea v-if="isTextArea(column)" v-model="vModel" :virtual="props.virtual" />
-      <LazyCellGeoData v-else-if="isGeoData(column)" v-model="vModel" />
-      <LazyCellCheckbox v-else-if="isBoolean(column, abstractType)" v-model="vModel" />
-      <LazyCellAttachment v-else-if="isAttachment(column)" v-model="vModel" :row-index="props.rowIndex" />
+      <div v-if="isGenerating" class="flex items-center gap-2 w-full">
+        <GeneralLoader />
+        <NcTooltip class="truncate max-w-[calc(100%_-_24px)]" show-on-truncate-only>
+          <template #title> {{ $t('general.generating') }} </template>
+          {{ $t('general.generating') }}
+        </NcTooltip>
+      </div>
+      <LazyCellNull v-else-if="showNullComponent" />
+      <LazyCellAI v-else-if="cellType === 'ai'" v-model="vModel" @save="emit('save')" />
+      <LazyCellTextArea v-else-if="cellType === 'textarea'" v-model="vModel" :virtual="props.virtual" />
+
+      <template v-else-if="cellType === 'geoData'">
+        <LazyCellGeoDataReadonly v-if="showReadonlyField" v-model:local-edit-enabled="localEditEnabled" :model-value="vModel" />
+        <LazyCellGeoDataEditor v-else v-model="vModel" v-model:local-edit-enabled="localEditEnabled" />
+      </template>
+
+      <template v-else-if="cellType === 'checkbox'">
+        <LazyCellCheckboxReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellCheckboxEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'yearPicker'">
+        <LazyCellYearReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellYearEditor v-else v-model="vModel" :is-pk="isPrimaryKeyCol" />
+      </template>
+
+      <template v-else-if="cellType === 'datePicker'">
+        <LazyCellDateReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellDateEditor
+          v-else
+          v-model="vModel"
+          :is-pk="isPrimaryKeyCol"
+          :show-current-date-option="showCurrentDateOption"
+          @current-date="currentDate"
+        />
+      </template>
+
+      <template v-else-if="cellType === 'dateTimePicker'">
+        <LazyCellDateTimeReadonly
+          v-if="showReadonlyField"
+          :model-value="vModel"
+          :is-updated-from-copy-n-paste="currentRow.rowMeta.isUpdatedFromCopyNPaste"
+        />
+        <LazyCellDateTimeEditor
+          v-else
+          v-model="vModel"
+          :is-pk="isPrimaryKeyCol"
+          :is-updated-from-copy-n-paste="currentRow.rowMeta.isUpdatedFromCopyNPaste"
+          :show-current-date-option="showCurrentDateOption"
+          @current-date="currentDate"
+        />
+      </template>
+
+      <LazyCellAttachment
+        v-else-if="cellType === 'attachment'"
+        ref="attachmentCell"
+        v-model="vModel"
+        :row-index="props.rowIndex"
+      />
+
       <LazyCellSingleSelect
-        v-else-if="isSingleSelect(column)"
+        v-else-if="cellType === 'singleSelect'"
         v-model="vModel"
-        :disable-option-creation="!!isEditColumnMenu"
+        :disable-option-creation="isEditColumnMenu"
         :row-index="props.rowIndex"
+        :show-readonly-field="showReadonlyField"
       />
+
       <LazyCellMultiSelect
-        v-else-if="isMultiSelect(column)"
+        v-else-if="cellType === 'multiSelect'"
         v-model="vModel"
-        :disable-option-creation="!!isEditColumnMenu"
+        :disable-option-creation="isEditColumnMenu"
         :row-index="props.rowIndex"
+        :show-readonly-field="showReadonlyField"
       />
-      <LazyCellDatePicker v-else-if="isDate(column, abstractType)" v-model="vModel" :is-pk="isPrimaryKey(column)" />
-      <LazyCellYearPicker v-else-if="isYear(column, abstractType)" v-model="vModel" :is-pk="isPrimaryKey(column)" />
-      <LazyCellDateTimePicker
-        v-else-if="isDateTime(column, abstractType)"
+
+      <template v-else-if="cellType === 'timePicker'">
+        <LazyCellTimeReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellTimeEditor v-else v-model="vModel" :is-pk="isPrimaryKeyCol" />
+      </template>
+
+      <template v-else-if="cellType === 'rating'">
+        <LazyCellRatingReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellRatingEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'duration'">
+        <LazyCellDurationReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellDurationEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'email'">
+        <LazyCellEmailReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellEmailEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'url'">
+        <LazyCellUrlReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellUrlEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'phoneNumber'">
+        <LazyCellPhoneNumberReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellPhoneNumberEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'percent'">
+        <LazyCellPercentReadonly v-if="showReadonlyField" v-model:local-edit-enabled="localEditEnabled" :model-value="vModel" />
+        <LazyCellPercentEditor v-else v-model="vModel" v-model:local-edit-enabled="localEditEnabled" />
+      </template>
+
+      <template v-else-if="cellType === 'currency'">
+        <LazyCellCurrencyReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellCurrencyEditor v-else v-model="vModel" @save="emit('save')" />
+      </template>
+
+      <LazyCellUser
+        v-else-if="cellType === 'user'"
         v-model="vModel"
-        :is-pk="isPrimaryKey(column)"
-        :is-updated-from-copy-n-paste="currentRow.rowMeta.isUpdatedFromCopyNPaste"
+        :row-index="props.rowIndex"
+        :show-readonly-field="showReadonlyField"
       />
-      <LazyCellTimePicker v-else-if="isTime(column, abstractType)" v-model="vModel" :is-pk="isPrimaryKey(column)" />
-      <LazyCellRating v-else-if="isRating(column)" v-model="vModel" />
-      <LazyCellDuration v-else-if="isDuration(column)" v-model="vModel" />
-      <LazyCellEmail v-else-if="isEmail(column)" v-model="vModel" />
-      <LazyCellUrl v-else-if="isURL(column)" v-model="vModel" />
-      <LazyCellPhoneNumber v-else-if="isPhoneNumber(column)" v-model="vModel" />
-      <LazyCellPercent v-else-if="isPercent(column)" v-model="vModel" />
-      <LazyCellCurrency v-else-if="isCurrency(column)" v-model="vModel" @save="emit('save')" />
-      <LazyCellUser v-else-if="isUser(column)" v-model="vModel" :row-index="props.rowIndex" />
-      <LazyCellDecimal v-else-if="isDecimal(column)" v-model="vModel" />
-      <LazyCellFloat v-else-if="isFloat(column, abstractType)" v-model="vModel" />
-      <LazyCellText v-else-if="isString(column, abstractType)" v-model="vModel" />
-      <LazyCellInteger v-else-if="isInt(column, abstractType)" v-model="vModel" />
-      <LazyCellJson v-else-if="isJSON(column)" v-model="vModel" />
-      <LazyCellText v-else v-model="vModel" />
-      <div
-        v-if="((isPublic && readOnly && !isForm) || isSystemColumn(column)) && !isAttachment(column) && !isTextArea(column)"
-        class="nc-locked-overlay"
-      />
+
+      <template v-else-if="cellType === 'decimal'">
+        <LazyCellDecimalReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellDecimalEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'float'">
+        <LazyCellFloatReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellFloatEditor v-else v-model="vModel" />
+      </template>
+
+      <template v-else-if="cellType === 'integer'">
+        <LazyCellIntegerReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellIntegerEditor v-else v-model="vModel" />
+      </template>
+
+      <LazyCellJson v-else-if="cellType === 'json'" v-model="vModel" />
+
+      <template v-else>
+        <LazyCellTextReadonly v-if="showReadonlyField" :model-value="vModel" />
+        <LazyCellTextEditor v-else v-model="vModel" />
+      </template>
+
+      <div v-if="showLockedOverlay" class="nc-locked-overlay" />
     </template>
   </div>
 </template>
@@ -219,8 +466,10 @@ const onContextmenu = (e: MouseEvent) => {
   :deep(input),
   :deep(textarea),
   :deep(.nc-cell-field-link) {
-    @apply !text-sm;
-    font-weight: 500;
+    &:not(.ant-select-selection-search-input) {
+      @apply !text-sm;
+      font-weight: 500;
+    }
   }
 
   :deep(input::placeholder),

@@ -20,12 +20,14 @@ const renderIcon = (column: ColumnType, abstractType: any) => {
     return iconMap.cellSingleSelect
   } else if (isBoolean(column, abstractType)) {
     return iconMap.cellCheckbox
+  } else if (isAI(column)) {
+    return iconMap.cellAi
   } else if (isTextArea(column)) {
     return iconMap.cellLongText
   } else if (isEmail(column)) {
     return iconMap.cellEmail
   } else if (isYear(column, abstractType)) {
-    return iconMap.cellDate
+    return iconMap.cellYear
   } else if (isTime(column, abstractType)) {
     return iconMap.cellTime
   } else if (isRating(column)) {

@@ -1,7 +1,8 @@
 import RedisCacheMgr from './RedisCacheMgr';
 import RedisMockCacheMgr from './RedisMockCacheMgr';
 import type CacheMgr from './CacheMgr';
-import { CacheGetType } from '~/utils/globals';
+import { CACHE_PREFIX, CacheGetType } from '~/utils/globals';
+import { getRedisURL } from '~/helpers/redisHelpers';
 
 export default class NocoCache {
   private static client: CacheMgr;
@@ -13,15 +14,24 @@ export default class NocoCache {
     if (this.cacheDisabled) {
       return;
     }
-    if (process.env.NC_REDIS_URL) {
-      this.client = new RedisCacheMgr(process.env.NC_REDIS_URL);
+    if (getRedisURL()) {
+      this.client = new RedisCacheMgr(getRedisURL());
     } else {
       this.client = new RedisMockCacheMgr();
     }
 
     // TODO(cache): fetch orgs once it's implemented
     const orgs = 'noco';
-    this.prefix = `nc:${orgs}`;
+    this.prefix = `${CACHE_PREFIX}:${orgs}`;
+  }
+
+  public static disableCache() {
+    this.cacheDisabled = true;
+  }
+
+  public static enableCache() {
+    // return to default value
+    this.cacheDisabled = (process.env.NC_DISABLE_CACHE || false) === 'true';
   }
 
   public static async set(key, value): Promise<boolean> {

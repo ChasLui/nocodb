@@ -6,9 +6,11 @@ import { AccountUsersPage } from './Users';
 import { AccountAppStorePage } from './AppStore';
 import { AccountLicensePage } from './License';
 import { AccountAuthenticationPage } from './Authentication';
+import { AccountSetupPage } from './Setup';
 
 export class AccountPage extends BasePage {
   readonly settings: AccountSettingsPage;
+  readonly setup: AccountSetupPage;
   readonly token: AccountTokenPage;
   readonly users: AccountUsersPage;
   readonly appStore: AccountAppStorePage;
@@ -23,6 +25,7 @@ export class AccountPage extends BasePage {
     this.appStore = new AccountAppStorePage(this);
     this.license = new AccountLicensePage(this);
     this.authentication = new AccountAuthenticationPage(this);
+    this.setup = new AccountSetupPage(this);
   }
 
   get() {
@@ -35,7 +38,7 @@ export class AccountPage extends BasePage {
 
   async signOut() {
     await this.openAppMenu();
-    await this.rootPage.locator('div.nc-account-dropdown-item:has-text("Sign Out"):visible').click();
+    await this.rootPage.locator('[data-testid="nc-menu-accounts__sign-out"]').click();
     await this.rootPage.locator('[data-testid="nc-form-signin"]:visible').waitFor();
   }
 }

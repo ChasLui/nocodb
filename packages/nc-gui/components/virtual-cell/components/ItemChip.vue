@@ -9,9 +9,10 @@ interface Props {
   showUnlinkButton?: boolean
   border?: boolean
   readonly?: boolean
+  truncate?: boolean
 }
 
-const { value, item, column, showUnlinkButton, border = true, readonly: readonlyProp } = defineProps<Props>()
+const { value, item, column, showUnlinkButton, border = true, readonly: readonlyProp, truncate = true } = defineProps<Props>()
 
 const emit = defineEmits(['unlink'])
 
@@ -32,7 +33,7 @@ const isPublic = inject(IsPublicInj, ref(false))
 const { open } = useExpandedFormDetached()
 
 function openExpandedForm() {
-  if (!active.value) return
+  if (!active.value && !isExpandedForm.value) return
 
   const rowId = extractPkFromRow(item, relatedTableMeta.value.columns as ColumnType[])
   if (!readOnly.value && !readonlyProp && rowId) {
@@ -42,6 +43,7 @@ function openExpandedForm() {
       meta: relatedTableMeta.value,
       rowId,
       useMetaFields: true,
+      maintainDefaultViewOrder: true,
       loadRow: !isPublic.value,
     })
   }
@@ -57,9 +59,8 @@ export default {
 <template>
   <div
     v-e="['c:row-expand:open']"
-    class="chip group mr-1 my-0.5 flex items-center rounded-[2px] flex-row truncate"
-    :class="{ active, 'border-1 py-1 px-2': isAttachment(column) }"
-    @click="openExpandedForm"
+    class="chip group mr-1 my-0.5 flex items-center rounded-[2px] flex-row"
+    :class="{ active, 'border-1 py-1 px-2': isAttachment(column), truncate }"
   >
     <div class="text-ellipsis overflow-hidden pointer-events-none">
       <span class="name">
@@ -79,10 +80,9 @@ export default {
           <!-- For attachment cell avoid adding chip style -->
           <template v-else>
             <div
-              class="min-w-max"
               :class="{
                 'px-1 rounded-full flex-1': !isAttachment(column),
-                'border-gray-200 rounded border-1':
+                'border-gray-200 rounded border-1 blue-chip':
                   border && ![UITypes.Attachment, UITypes.MultiSelect, UITypes.SingleSelect].includes(column.uidt),
               }"
             >
@@ -157,6 +157,16 @@ export default {
       .nc-cell-field-link {
         @apply py-0;
       }
+    }
+  }
+  .blue-chip {
+    @apply !bg-nc-bg-brand !border-none px-2 py-[3px] rounded-lg;
+    &,
+    & * {
+      @apply !text-nc-content-brand;
+    }
+    :deep(.clamped-text) {
+      @apply !block text-ellipsis;
     }
   }
 }

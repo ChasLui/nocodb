@@ -13,9 +13,11 @@ import type {
 import { UITypes, ViewTypes } from 'nocodb-sdk'
 
 export function useSharedView() {
+  const router = useRouter()
+
   const nestedFilters = ref<(FilterType & { status?: 'update' | 'delete' | 'create'; parentId?: string })[]>([])
 
-  const { appInfo, gridViewPageSize } = useGlobal()
+  const { appInfo } = useGlobal()
 
   const baseStore = useBase()
 
@@ -25,7 +27,7 @@ export function useSharedView() {
 
   const { base } = storeToRefs(baseStore)
 
-  const appInfoDefaultLimit = gridViewPageSize.value || appInfo.value.defaultLimit || 25
+  const appInfoDefaultLimit = appInfo.value.defaultLimit || 50
 
   const paginationData = useState<PaginatedType>('paginationData', () => ({
     page: 1,
@@ -70,6 +72,7 @@ export function useSharedView() {
         'xc-password': localPassword ?? password.value,
       },
     })
+
     try {
       allowCSVDownload.value = parseProp(viewMeta.meta)?.allowCSVDownload
     } catch {
@@ -134,9 +137,11 @@ export function useSharedView() {
       /** Query params for nested data */
       nested?: any
       offset?: number
+      limit?: number
     },
     opts?: {
       isGroupBy?: boolean
+      isInfiniteScroll?: boolean
     },
   ) => {
     if (!sharedView.value)
@@ -147,7 +152,9 @@ export function useSharedView() {
 
     if (!param.offset) {
       const page = paginationData.value.page || 1
-      const pageSize = opts?.isGroupBy
+      const pageSize = opts?.isInfiniteScroll
+        ? param.limit
+        : opts?.isGroupBy
         ? appInfo.value.defaultGroupByLimit?.limitRecord || 10
         : paginationData.value.pageSize || appInfoDefaultLimit
       param.offset = (page - 1) * pageSize
@@ -336,6 +343,23 @@ export function useSharedView() {
     )
   }
 
+  const fetchCount = async (param: { filtersArr: FilterType[]; where?: string }) => {
+    const data = await $api.public.dbViewRowCount(
+      sharedView.value.uuid!,
+      {
+        filterArrJson: JSON.stringify(param.filtersArr ?? nestedFilters.value),
+        where: param.where,
+      },
+      {
+        headers: {
+          'xc-password': password.value,
+        },
+      },
+    )
+
+    return data
+  }
+
   const fetchSharedViewGroupedData = async (
     columnId: string,
     { sortsArr, filtersArr }: { sortsArr: SortType[]; filtersArr: FilterType[] },
@@ -400,6 +424,28 @@ export function useSharedView() {
     } as RequestParams)
   }
 
+  const setCurrentViewExpandedFormMode = async (viewId: string, mode: 'field' | 'attachment', columnId?: string) => {
+    await $api.dbView.update(viewId, {
+      expanded_record_mode: mode,
+      attachment_mode_column_id: columnId,
+    })
+  }
+
+  const setCurrentViewExpandedFormAttachmentColumn = async (viewId: string, columnId: string) => {
+    await $api.dbView.update(viewId, {
+      attachment_mode_column_id: columnId,
+    })
+  }
+
+  const triggerNotFound = () => {
+    const currentQuery = { ...router.currentRoute.value.query, ncNotFound: 'true' }
+
+    router.push({
+      path: router.currentRoute.value.path,
+      query: currentQuery,
+    })
+  }
+
   return {
     sharedView,
     loadSharedView,
@@ -419,5 +465,9 @@ export function useSharedView() {
     exportFile,
     formColumns,
     allowCSVDownload,
+    fetchCount,
+    setCurrentViewExpandedFormMode,
+    setCurrentViewExpandedFormAttachmentColumn,
+    triggerNotFound,
   }
 }

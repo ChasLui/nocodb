@@ -199,6 +199,20 @@ export const useTablesStore = defineStore('tablesStore', () => {
     }
   }
 
+  const loadTableMeta = async (tableId: string) => {
+    try {
+      const meta = await $api.dbTable.read(tableId as string)
+      baseTables.value.set(
+        meta.base_id!,
+        baseTables.value.get(meta.base_id!)!.map((t) => (t.id === tableId ? { ...t, ...meta } : t)),
+      )
+
+      return meta
+    } catch (e: any) {
+      return null
+    }
+  }
+
   const tableUrl = ({ table, completeUrl, isSharedBase }: { table: TableType; completeUrl: boolean; isSharedBase?: boolean }) => {
     let base
     if (!isSharedBase) {
@@ -228,6 +242,12 @@ export const useTablesStore = defineStore('tablesStore', () => {
     return url.href
   }
 
+  const reloadTableMeta = async (tableId: string) => {
+    const { getMeta } = useMetas()
+
+    await getMeta(tableId, true)
+  }
+
   return {
     baseTables,
     loadProjectTables,
@@ -239,6 +259,8 @@ export const useTablesStore = defineStore('tablesStore', () => {
     activeTableId,
     navigateToTable,
     tableUrl,
+    reloadTableMeta,
+    loadTableMeta,
   }
 })
 

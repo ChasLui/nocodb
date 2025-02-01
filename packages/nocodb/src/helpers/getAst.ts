@@ -1,11 +1,13 @@
 import {
   isCreatedOrLastModifiedByCol,
   isCreatedOrLastModifiedTimeCol,
+  isOrderCol,
   isSystemColumn,
   RelationTypes,
   UITypes,
   ViewTypes,
 } from 'nocodb-sdk';
+import { NcApiVersion } from 'nocodb-sdk';
 import type {
   Column,
   LinkToAnotherRecordColumn,
@@ -13,7 +15,6 @@ import type {
   Model,
 } from '~/models';
 import type { NcContext } from '~/interface/config';
-import { NcError } from '~/helpers/catchError';
 import {
   CalendarRange,
   GalleryView,
@@ -22,6 +23,11 @@ import {
   KanbanViewColumn,
   View,
 } from '~/models';
+import { NcError } from '~/helpers/catchError';
+
+type Ast = {
+  [key: string]: 1 | true | null | Ast;
+};
 
 const getAst = async (
   context: NcContext,
@@ -39,6 +45,8 @@ const getAst = async (
     getHiddenColumn = query?.['getHiddenColumn'],
     throwErrorIfInvalidParams = false,
     extractOnlyRangeFields = false,
+    apiVersion = NcApiVersion.V2,
+    extractOrderColumn = false,
   }: {
     query?: RequestQuery;
     extractOnlyPrimaries?: boolean;
@@ -50,8 +58,14 @@ const getAst = async (
     throwErrorIfInvalidParams?: boolean;
     // Used for calendar view
     extractOnlyRangeFields?: boolean;
+    apiVersion?: NcApiVersion;
+    extractOrderColumn?: boolean;
   },
-) => {
+): Promise<{
+  ast: Ast;
+  dependencyFields: DependantFields;
+  parsedQuery: DependantFields;
+}> => {
   // set default values of dependencyFields and nested
   dependencyFields.nested = dependencyFields.nested || {};
   dependencyFields.fieldsSet = dependencyFields.fieldsSet || new Set();
@@ -83,7 +97,7 @@ const getAst = async (
 
   // extract only pk and pv
   if (extractOnlyPrimaries) {
-    const ast = {
+    const ast: Ast = {
       ...(model.primaryKeys
         ? model.primaryKeys.reduce((o, pk) => ({ ...o, [pk.title]: 1 }), {})
         : {}),
@@ -101,7 +115,7 @@ const getAst = async (
   }
 
   if (extractOnlyRangeFields) {
-    const ast = {
+    const ast: Ast = {
       ...(dependencyFieldsForCalenderView || []).reduce((o, f) => {
         const col = model.columns.find((c) => c.id === f);
         return { ...o, [col.title]: 1 };
@@ -161,7 +175,12 @@ const getAst = async (
     }
   }
 
-  const ast = await model.columns.reduce(async (obj, col: Column) => {
+  const columns =
+    getHiddenColumn === true
+      ? model.columns
+      : await stripMmColumns(context, model.columns);
+
+  const ast: Ast = await columns.reduce(async (obj, col: Column) => {
     let value: number | boolean | { [key: string]: any } = 1;
     const nestedFields =
       query?.nested?.[col.title]?.fields || query?.nested?.[col.title]?.f;
@@ -213,8 +232,25 @@ const getAst = async (
     }
     let isRequested;
 
-    if (isCreatedOrLastModifiedByCol(col) && col.system) {
+    // exclude system column and foreign key from API response for v3
+    if (
+      (col.system || col.uidt === UITypes.ForeignKey) &&
+      apiVersion === NcApiVersion.V3
+    ) {
       isRequested = false;
+    } else if (col.uidt === UITypes.ForeignKey && !getHiddenColumn) {
+      isRequested = false;
+    } else if (isCreatedOrLastModifiedByCol(col) && col.system) {
+      isRequested = false;
+    } else if (isOrderCol(col) && col.system) {
+      isRequested = extractOrderColumn || getHiddenColumn;
+    } else if (
+      getHiddenColumn &&
+      [UITypes.Links, UITypes.LinkToAnotherRecord, UITypes.ForeignKey].includes(
+        col.uidt,
+      )
+    ) {
+      isRequested = value;
     } else if (getHiddenColumn) {
       isRequested =
         !isSystemColumn(col) ||
@@ -344,9 +380,27 @@ type RequestQuery = {
   };
 };
 
+const stripMmColumns = async (context: NcContext, columns: Column<any>[]) => {
+  const modelIdMap: { [key: string]: string } = {};
+  const exclude: { [key: string]: boolean } = {};
+  for (const linkColumn of columns.filter((k) =>
+    [UITypes.Links, UITypes.LinkToAnotherRecord].includes(k.uidt),
+  )) {
+    const colOptions = (await linkColumn.getColOptions(
+      context,
+    )) as LinkToAnotherRecordColumn;
+    if (colOptions.type === 'mm') {
+      exclude[colOptions.fk_mm_model_id] = true;
+    } else if (colOptions.type === 'hm') {
+      modelIdMap[linkColumn.id] = colOptions.fk_related_model_id;
+    }
+  }
+  return columns.filter((col) => !exclude[modelIdMap[col.id]]);
+};
+
 export interface DependantFields {
   fieldsSet?: Set<string>;
-  nested?: DependantFields;
+  nested?: { [key: string]: DependantFields };
 }
 
 export default getAst;

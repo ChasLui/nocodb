@@ -53,6 +53,7 @@ const rolePermissions = {
   [ProjectRoles.OWNER]: {
     include: {
       baseDelete: true,
+      manageSnapshot: true,
     },
   },
   [ProjectRoles.CREATOR]: {
@@ -60,9 +61,11 @@ const rolePermissions = {
       baseCreate: true,
       fieldUpdate: true,
       hookList: true,
+      hookCreate: true,
       tableCreate: true,
       tableRename: true,
       tableDelete: true,
+      tableDescriptionEdit: true,
       tableDuplicate: true,
       tableSort: true,
       layoutRename: true,
@@ -71,7 +74,6 @@ const rolePermissions = {
       jsonImport: true,
       excelImport: true,
       settingsPage: true,
-      newUser: true,
       webhook: true,
       fieldEdit: true,
       fieldAlter: true,
@@ -87,6 +89,8 @@ const rolePermissions = {
       baseDuplicate: true,
       sourceCreate: true,
       baseAuditList: true,
+
+      extensionList: true,
     },
   },
   [ProjectRoles.EDITOR]: {
@@ -99,6 +103,7 @@ const rolePermissions = {
       viewFieldEdit: true,
       csvTableImport: true,
       excelTableImport: true,
+      hookTrigger: true,
     },
   },
   [ProjectRoles.COMMENTER]: {
@@ -117,6 +122,7 @@ const rolePermissions = {
       commentList: true,
       commentCount: true,
       auditListRow: true,
+      newUser: true,
     },
   },
   [ProjectRoles.NO_ACCESS]: {

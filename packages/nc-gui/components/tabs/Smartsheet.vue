@@ -29,7 +29,8 @@ const { handleSidebarOpenOnMobileForNonViews } = useConfigStore()
 const { activeTableId } = storeToRefs(useTablesStore())
 
 const { activeView, openedViewsTab, activeViewTitleOrId } = storeToRefs(useViewsStore())
-const { isGallery, isGrid, isForm, isKanban, isLocked, isMap, isCalendar, xWhere } = useProvideSmartsheetStore(activeView, meta)
+const { isGallery, isGrid, isForm, isKanban, isLocked, isMap, isCalendar, xWhere, isActionPaneActive, actionPaneSize } =
+  useProvideSmartsheetStore(activeView, meta)
 
 useSqlEditor()
 
@@ -44,6 +45,9 @@ const { base } = storeToRefs(useBase())
 const activeSource = computed(() => {
   return meta.value?.source_id && base.value && base.value.sources?.find((source) => source.id === meta.value?.source_id)
 })
+const { isFeatureEnabled } = useBetaFeatureToggle()
+
+const isAutomationEnabled = computed(() => isFeatureEnabled(FEATURE_FLAG.NOCODB_SCRIPTS))
 
 useProvideKanbanViewStore(meta, activeView)
 useProvideMapViewStore(meta, activeView)
@@ -81,6 +85,8 @@ useProvideSmartsheetLtarHelpers(meta)
 const grid = ref()
 
 const extensionPaneRef = ref()
+
+const actionPaneRef = ref()
 
 const onDrop = async (event: DragEvent) => {
   event.preventDefault()
@@ -161,12 +167,33 @@ watch([activeViewTitleOrId, activeTableId], () => {
   handleSidebarOpenOnMobileForNonViews()
 })
 
+const { leftSidebarWidth, windowSize } = storeToRefs(useSidebarStore())
+
 const { isPanelExpanded, extensionPanelSize } = useExtensions()
+
+const contentSize = computed(() => {
+  if (isPanelExpanded.value && extensionPanelSize.value) {
+    return 100 - extensionPanelSize.value
+  } else if (isActionPaneActive.value && actionPaneSize.value) {
+    return 100 - actionPaneSize.value
+  } else {
+    return 100
+  }
+})
+
+const contentMaxSize = computed(() => {
+  if (!isPanelExpanded.value && !isActionPaneActive.value) {
+    return 100
+  } else {
+    return ((windowSize.value - leftSidebarWidth.value - 300) / (windowSize.value - leftSidebarWidth.value)) * 100
+  }
+})
 
 const onResize = (sizes: { min: number; max: number; size: number }[]) => {
   if (sizes.length === 2) {
     if (!sizes[1].size) return
-    extensionPanelSize.value = sizes[1].size
+    if (isPanelExpanded.value) extensionPanelSize.value = sizes[1].size
+    else if (isActionPaneActive.value) actionPaneSize.value = sizes[1].size
   }
 }
 
@@ -175,6 +202,13 @@ const onReady = () => {
     // wait until extension pane animation complete
     setTimeout(() => {
       extensionPaneRef.value?.onReady()
+    }, 300)
+  }
+
+  if (isActionPaneActive.value && actionPaneRef.value) {
+    // wait until action pane animation complete
+    setTimeout(() => {
+      actionPaneRef.value?.onReady()
     }, 300)
   }
 }
@@ -187,10 +221,13 @@ const onReady = () => {
       <Splitpanes
         v-if="openedViewsTab === 'view'"
         class="nc-extensions-content-resizable-wrapper"
-        @ready="onReady"
+        :class="{
+          'nc-is-open-extensions': isPanelExpanded,
+        }"
+        @ready="() => onReady()"
         @resized="onResize"
       >
-        <Pane class="flex flex-col h-full min-w-0" :size="isPanelExpanded && extensionPanelSize ? 100 - extensionPanelSize : 100">
+        <Pane class="flex flex-col h-full min-w-0" :max-size="contentMaxSize" :size="contentSize">
           <LazySmartsheetToolbar v-if="!isForm" />
           <div
             :style="{ height: isForm || isMobileMode ? '100%' : 'calc(100% - var(--toolbar-height))' }"
@@ -217,7 +254,8 @@ const onReady = () => {
             </Transition>
           </div>
         </Pane>
-        <ExtensionsPane ref="extensionPaneRef" />
+        <ExtensionsPane v-if="isPanelExpanded" ref="extensionPaneRef" />
+        <SmartsheetAutomationActionPane v-else-if="isActionPaneActive && isEeUI && isAutomationEnabled" ref="actionPaneRef" />
       </Splitpanes>
       <SmartsheetDetails v-else />
     </div>
@@ -230,29 +268,37 @@ const onReady = () => {
   @apply !w-0 !max-w-0 !min-w-0 overflow-x-hidden;
 }
 
-.nc-extensions-content-resizable-wrapper > {
-  .splitpanes__splitter {
-    @apply !w-0 relative overflow-visible;
-  }
-  .splitpanes__splitter:before {
-    @apply bg-gray-200 w-0.25 absolute left-0 top-0 h-full z-40;
-    content: '';
+.nc-extensions-content-resizable-wrapper {
+  &:not(.nc-is-open-extensions) > {
+    .splitpanes__splitter {
+      @apply hidden;
+    }
   }
 
-  .splitpanes__splitter:hover:before {
-    @apply bg-scrollbar;
-    width: 3px !important;
-    left: 0px;
-  }
+  & > {
+    .splitpanes__splitter {
+      @apply !w-0 relative overflow-visible z-40 -ml-1px;
+    }
+    .splitpanes__splitter:before {
+      @apply bg-gray-200 absolute left-0 top-[12px] h-[calc(100%_-_24px)] rounded-full z-40;
+      content: '';
+    }
 
-  .splitpanes--dragging .splitpanes__splitter:before {
-    @apply bg-scrollbar;
-    width: 3px !important;
-    left: 0px;
-  }
+    .splitpanes__splitter:hover:before {
+      @apply bg-scrollbar;
+      width: 3px !important;
+      left: 0px;
+    }
 
-  .splitpanes--dragging .splitpanes__splitter {
-    @apply w-1 mr-0;
+    .splitpanes--dragging .splitpanes__splitter:before {
+      @apply bg-scrollbar;
+      width: 3px !important;
+      left: 0px;
+    }
+
+    .splitpanes--dragging .splitpanes__splitter {
+      @apply w-1 mr-0;
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import UITypes from '../UITypes';
 import { IDType } from './index';
+import { ColumnType } from '~/lib';
 
 const dbTypes = [
   'int',
@@ -239,6 +240,30 @@ export class PgUi {
         dtxs: '',
         altered: 1,
         uidt: UITypes.LastModifiedBy,
+        uip: '',
+        uicn: '',
+        system: true,
+      },
+      {
+        column_name: 'nc_order',
+        title: 'nc_order',
+        dt: 'numeric',
+        dtx: 'specificType',
+        ct: 'numeric(40,20)',
+        nrqd: true,
+        rqd: false,
+        ck: false,
+        pk: false,
+        un: false,
+        ai: false,
+        cdf: null,
+        clen: null,
+        np: 40,
+        ns: 20,
+        dtxp: '40,20',
+        dtxs: '',
+        altered: 1,
+        uidt: UITypes.Order,
         uip: '',
         uicn: '',
         system: true,
@@ -1747,6 +1772,9 @@ export class PgUi {
       case 'JSON':
         colProp.dt = 'json';
         break;
+      case 'Order':
+        colProp.dt = 'numeric';
+        break;
       default:
         colProp.dt = 'character varying';
         break;
@@ -1784,7 +1812,7 @@ export class PgUi {
       case 'LongText':
       case 'Collaborator':
       case 'GeoData':
-        return ['text',  'character varying', 'char', 'character'];
+        return ['text', 'character varying', 'char', 'character'];
 
       case 'Attachment':
         return ['json', 'text', 'char', 'character', 'character varying'];
@@ -1943,6 +1971,7 @@ export class PgUi {
         ];
 
       case 'Formula':
+      case 'Button':
         return ['text', 'character varying'];
 
       case 'Rollup':
@@ -2007,6 +2036,9 @@ export class PgUi {
           'smallserial',
         ];
 
+      case 'Order':
+        return ['numeric'];
+
       case 'Barcode':
         return ['character varying'];
 
@@ -2022,7 +2054,6 @@ export class PgUi {
           'circle',
         ];
 
-      case 'Button':
       default:
         return dbTypes;
     }
@@ -2030,6 +2061,13 @@ export class PgUi {
 
   static getUnsupportedFnList() {
     return [];
+  }
+
+  static getCurrentDateDefault(col: Partial<ColumnType>) {
+    if (col.uidt === UITypes.DateTime || col.uidt === UITypes.Date) {
+      return 'NOW()';
+    }
+    return null;
   }
 
   static isEqual(dataType1: string, dataType2: string) {

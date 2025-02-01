@@ -28,6 +28,8 @@ const baseId = computed(() => _projectId?.value ?? base.value?.id)
 
 const { refreshCommandPalette } = useCommandPalette()
 
+const filteredIntegrations = computed(() => integrations.value.filter((i) => i.sub_type !== SyncDataType.NOCODB))
+
 const useForm = Form.useForm
 
 const testSuccess = ref(false)
@@ -49,6 +51,8 @@ const easterEgg = ref(false)
 const easterEggCount = ref(0)
 
 const advancedOptionsExpansionPanel = ref<string[]>([])
+
+const isLoading = ref<boolean>(false)
 
 const onEasterEgg = () => {
   easterEggCount.value += 1
@@ -277,7 +281,12 @@ watch(
 
 // load source config
 onMounted(async () => {
-  await loadIntegrations(true, base.value?.id)
+  isLoading.value = true
+
+  if (!integrations.value.length) {
+    await loadIntegrations(true, base.value?.id)
+  }
+
   if (base.value?.id) {
     const definedParameters = ['host', 'port', 'user', 'password', 'database']
 
@@ -302,6 +311,8 @@ onMounted(async () => {
     }
     updateSSLUse()
   }
+
+  isLoading.value = false
 })
 
 // if searchPath is null/undefined reset it to empty array when necessary
@@ -369,7 +380,7 @@ function handleAutoScroll(scroll: boolean, className: string) {
 <template>
   <div class="edit-source bg-white relative h-full flex flex-col w-full">
     <div class="h-full max-h-[calc(100%_-_65px)] flex">
-      <div class="nc-edit-source-left-panel nc-scrollbar-thin">
+      <div class="nc-edit-source-left-panel nc-scrollbar-thin relative">
         <div class="h-full max-w-[768px] mx-auto">
           <a-form
             ref="form"
@@ -402,12 +413,18 @@ function handleAutoScroll(scroll: boolean, className: string) {
                         show-search
                         dropdown-match-select-width
                       >
-                        <a-select-option v-for="integration in integrations" :key="integration.id" :value="integration.id">
+                        <a-select-option
+                          v-for="integration in filteredIntegrations"
+                          :key="integration.id"
+                          :value="integration.id"
+                        >
                           <div class="w-full flex gap-2 items-center" :data-testid="integration.title">
-                            <GeneralBaseLogo
-                              v-if="integration.type"
-                              :source-type="integration.sub_type"
-                              class="flex-none h-4 w-4"
+                            <GeneralIntegrationIcon
+                              v-if="integration?.sub_type"
+                              :type="integration.sub_type"
+                              :style="{
+                                filter: 'grayscale(100%) brightness(115%)',
+                              }"
                             />
                             <NcTooltip class="flex-1 truncate" show-on-truncate-only>
                               <template #title>
@@ -582,6 +599,11 @@ function handleAutoScroll(scroll: boolean, className: string) {
             </div>
           </a-form>
         </div>
+        <general-overlay :model-value="isLoading" inline transition class="!bg-opacity-15">
+          <div class="flex items-center justify-center h-full w-full !bg-white !bg-opacity-85 z-1000">
+            <a-spin size="large" />
+          </div>
+        </general-overlay>
       </div>
       <div class="nc-edit-source-right-panel">
         <DashboardSettingsDataSourcesSupportedDocs />
@@ -608,8 +630,9 @@ function handleAutoScroll(scroll: boolean, className: string) {
             class="nc-extdb-btn-test-connection"
             :class="{ 'pointer-events-none': testSuccess }"
             :loading="testingConnection"
+            :disabled="isLoading"
             icon-position="right"
-            @click="testConnection"
+            @click="testConnection()"
           >
             <template #icon>
               <GeneralIcon v-if="testSuccess" icon="circleCheckSolid" class="!text-green-700 w-4 h-4" />
@@ -625,7 +648,7 @@ function handleAutoScroll(scroll: boolean, className: string) {
         <NcButton
           size="small"
           type="primary"
-          :disabled="!testSuccess"
+          :disabled="!testSuccess || isLoading"
           :loading="editingSource"
           class="nc-extdb-btn-submit"
           @click="editBase"

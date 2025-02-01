@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { HookReqType, HookTestReqType, HookType } from 'nocodb-sdk'
 import type { Ref } from 'vue'
+import { onKeyDown } from '@vueuse/core'
 
 import { extractNextDefaultName } from '~/helpers/parsers/parserHelpers'
 
@@ -12,7 +13,7 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const emits = defineEmits(['close'])
+const emits = defineEmits(['close', 'update:value'])
 
 const { eventList } = toRefs(props)
 
@@ -29,6 +30,10 @@ const { hooks } = storeToRefs(useWebhooksStore())
 const { base } = storeToRefs(useBase())
 
 const meta = inject(MetaInj, ref())
+
+const { getMeta } = useMetas()
+
+const { activeTable } = toRefs(useTablesStore())
 
 const defaultHookName = t('labels.webhook')
 
@@ -51,8 +56,20 @@ let hookRef = reactive<
     payload: {
       method: 'POST',
       body: '{{ json event }}',
-      headers: [{}],
-      parameters: [{}],
+      headers: [
+        {
+          enabled: false,
+          name: '',
+          value: '',
+        },
+      ],
+      parameters: [
+        {
+          enabled: false,
+          name: '',
+          value: '',
+        },
+      ],
       path: '',
     },
   },
@@ -223,24 +240,6 @@ const validators = computed(() => {
 })
 const { validate, validateInfos } = useForm(hookRef, validators)
 
-const isValid = computed(() => {
-  // Recursively check if all the fields are valid
-  const check = (obj: Record<string, any>) => {
-    for (const key in obj) {
-      if (typeof obj[key] === 'object') {
-        if (!check(obj[key])) {
-          return false
-        }
-      } else if (obj && key === 'validateStatus' && obj[key] === 'error') {
-        return false
-      }
-    }
-    return true
-  }
-
-  return hookRef && check(validateInfos)
-})
-
 const getChannelsArray = (val: unknown) => {
   if (val) {
     if (Array.isArray(val)) {
@@ -283,7 +282,7 @@ function onNotificationTypeChange(reset = false) {
     hookRef.notification.payload.parameters = hookRef.notification.payload.parameters || [{}]
     hookRef.notification.payload.headers = hookRef.notification.payload.headers || [{}]
     hookRef.notification.payload.method = hookRef.notification.payload.method || 'POST'
-    hookRef.notification.payload.auth = hookRef.notification.payload.auth || ''
+    hookRef.notification.payload.auth = hookRef.notification.payload.auth ?? ''
   }
 }
 
@@ -373,7 +372,7 @@ async function loadPluginList() {
 }
 
 const isConditionSupport = computed(() => {
-  return hookRef.eventOperation && !hookRef.eventOperation.includes('bulk')
+  return hookRef.eventOperation && !(hookRef.eventOperation.includes('bulk') || hookRef.eventOperation.includes('manual'))
 })
 
 async function saveHooks() {
@@ -430,18 +429,23 @@ async function saveHooks() {
       return h
     })
 
-    emits('close')
+    $e('a:webhook:add', {
+      operation: hookRef.operation,
+      condition: hookRef.condition,
+      notification: hookRef.notification.type,
+    })
+
+    emits('close', hookRef)
   } catch (e: any) {
     message.error(await extractSdkResponseErrorMsg(e))
   } finally {
+    getMeta(activeTable.value.id, true)
     loading.value = false
   }
+}
 
-  $e('a:webhook:add', {
-    operation: hookRef.operation,
-    condition: hookRef.condition,
-    notification: hookRef.notification.type,
-  })
+const closeModal = () => {
+  emits('close', hookRef)
 }
 
 const isTestLoading = ref(false)
@@ -540,6 +544,10 @@ const getNotificationIconName = (type: string): keyof typeof iconMap => {
   }
 }
 
+onKeyDown('Escape', () => {
+  modalVisible.value = false
+})
+
 watch(
   () => hookRef.eventOperation,
   () => {
@@ -590,7 +598,7 @@ onMounted(async () => {
     <template #header>
       <div class="flex w-full items-center p-4 justify-between">
         <div class="flex items-center gap-3">
-          <GeneralIcon class="text-gray-900 text-2xl" icon="webhook" />
+          <GeneralIcon class="text-gray-900 h-5 w-5" icon="ncWebhook" />
           <span class="text-gray-900 font-semibold text-xl">
             {{ !hook ? $t('activity.newWebhook') : $t('activity.webhookDetails') }}
           </span>
@@ -612,11 +620,11 @@ onMounted(async () => {
             </NcButton>
           </NcTooltip>
 
-          <NcButton :loading="loading" type="primary" size="small" data-testid="nc-save-webhook" @click="saveHooks">
+          <NcButton :loading="loading" type="primary" size="small" data-testid="nc-save-webhook" @click.stop="saveHooks">
             {{ hook ? $t('labels.multiField.saveChanges') : $t('activity.createWebhook') }}
           </NcButton>
 
-          <NcButton type="text" size="small" data-testid="nc-close-webhook-modal" @click="modalVisible = false">
+          <NcButton type="text" size="small" data-testid="nc-close-webhook-modal" @click.stop="closeModal">
             <GeneralIcon icon="close" />
           </NcButton>
         </div>
@@ -652,6 +660,7 @@ onMounted(async () => {
                   <a-select
                     v-model:value="hookRef.eventOperation"
                     size="medium"
+                    :disabled="eventList.length === 1"
                     :placeholder="$t('general.event')"
                     class="nc-text-field-hook-event !h-9 capitalize"
                     dropdown-class-name="nc-dropdown-webhook-event"
@@ -772,6 +781,7 @@ onMounted(async () => {
                       >
                         <LazyMonacoEditor
                           v-model="hookRef.notification.payload.body"
+                          lang="handlebars"
                           disable-deep-compare
                           :validate="false"
                           class="min-h-60 max-h-80 !rounded-lg"
@@ -997,6 +1007,7 @@ onMounted(async () => {
 
 <style lang="scss">
 .nc-modal-webhook-create-edit {
+  z-index: 1050;
   a {
     @apply !no-underline !text-gray-700 !hover:text-primary;
   }

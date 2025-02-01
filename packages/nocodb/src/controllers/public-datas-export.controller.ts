@@ -8,8 +8,9 @@ import {
 } from '@nestjs/common';
 import { isSystemColumn, ViewTypes } from 'nocodb-sdk';
 import * as XLSX from 'xlsx';
-import { nocoExecute } from 'nc-help';
 import papaparse from 'papaparse';
+import { fromEntries } from '~/utils';
+import { nocoExecute } from '~/utils';
 import { NcError } from '~/helpers/catchError';
 import getAst from '~/helpers/getAst';
 import { serializeCellValue } from '~/helpers/dataHelpers';
@@ -52,6 +53,11 @@ export class PublicDatasExportController {
       NcError.invalidSharedViewPassword();
     }
 
+    // check if download is allowed, in general it's called as CSV download
+    if (!view.meta?.allowCSVDownload) {
+      NcError.forbidden('Download is not allowed for this view');
+    }
+
     const model = await view.getModelWithInfo(context);
 
     await view.getColumns(context);
@@ -67,7 +73,7 @@ export class PublicDatasExportController {
 
     const data = XLSX.utils.json_to_sheet(
       dbRows.map((o: Record<string, any>) =>
-        Object.fromEntries(fields.map((f) => [f, o[f]])),
+        fromEntries(fields.map((f) => [f, o[f]])),
       ),
       { header: fields },
     );
@@ -113,6 +119,11 @@ export class PublicDatasExportController {
 
     if (view.password && view.password !== req.headers?.['xc-password']) {
       NcError.invalidSharedViewPassword();
+    }
+
+    // check if download is allowed
+    if (!view.meta?.allowCSVDownload) {
+      NcError.forbidden('Download is not allowed for this view');
     }
 
     const model = await view.getModelWithInfo(context);

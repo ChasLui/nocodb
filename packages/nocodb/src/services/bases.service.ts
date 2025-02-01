@@ -27,6 +27,7 @@ import { getToolDir } from '~/utils/nc-config';
 import { MetaService } from '~/meta/meta.service';
 import { MetaTable, RootScopes } from '~/utils/globals';
 import { TablesService } from '~/services/tables.service';
+import { stringifyMetaProp } from '~/utils/modelUtils';
 
 const nanoid = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyz_', 4);
 
@@ -50,6 +51,11 @@ export class BasesService {
       : await BaseUser.getProjectsList(param.user.id, param.query);
 
     return bases;
+  }
+
+  async getProject(context: NcContext, param: { baseId: string }) {
+    const base = await Base.get(context, param.baseId);
+    return base;
   }
 
   async getProjectWithInfo(
@@ -85,12 +91,18 @@ export class BasesService {
 
     const base = await Base.getWithInfo(context, param.baseId);
 
+    // stringify meta prop then only we can make the sanitize function work
+    if ('meta' in param.base) {
+      param.base.meta = stringifyMetaProp(param.base);
+    }
+
     const data: Partial<Base> = extractPropsAndSanitize(param?.base as Base, [
       'title',
       'meta',
       'color',
       'status',
       'order',
+      'description',
     ]);
     await this.validateProjectTitle(context, data, base);
 
@@ -101,9 +113,15 @@ export class BasesService {
     const result = await Base.update(context, param.baseId, data);
 
     this.appHooksService.emit(AppEvents.PROJECT_UPDATE, {
-      base,
+      base: {
+        ...base,
+        ...data,
+      },
+      updateObj: data,
+      oldBaseObj: base,
       user: param.user,
       req: param.req,
+      context,
     });
 
     return result;
@@ -145,12 +163,16 @@ export class BasesService {
       base,
       user: param.user,
       req: param.req,
+      context,
     });
 
     return true;
   }
 
-  async baseCreate(param: { base: ProjectReqType; user: any; req: any }) {
+  async baseCreate(
+    param: { base: ProjectReqType; user: any; req: any },
+    ncMeta = Noco.ncMeta,
+  ) {
     validatePayload('swagger.json#/components/schemas/ProjectReq', param.base);
 
     const baseId = await this.metaService.genNanoid(MetaTable.PROJECT);
@@ -162,7 +184,29 @@ export class BasesService {
       const ranId = nanoid();
       baseBody.prefix = `nc_${ranId}__`;
       baseBody.is_meta = true;
-      if (process.env.NC_MINIMAL_DBS === 'true') {
+      const dataConfig = await Noco.getConfig()?.meta?.db;
+
+      if (
+        dataConfig?.client === 'pg' &&
+        process.env.NC_DISABLE_PG_DATA_REFLECTION !== 'true'
+      ) {
+        baseBody.prefix = '';
+        baseBody.sources = [
+          {
+            type: 'pg',
+            is_local: true,
+            is_meta: false,
+            config: {
+              schema: baseId,
+            },
+            inflection_column: 'camelize',
+            inflection_table: 'camelize',
+          },
+        ];
+      } else if (
+        dataConfig?.client === 'sqlite3' &&
+        process.env.NC_MINIMAL_DBS === 'true'
+      ) {
         // if env variable NC_MINIMAL_DBS is set, then create a SQLite file/connection for each base
         // each file will be named as nc_<random_id>.db
         const fs = require('fs');
@@ -181,6 +225,7 @@ export class BasesService {
           {
             type: 'sqlite3',
             is_meta: false,
+            is_local: true,
             config: {
               client: 'sqlite3',
               connection: {
@@ -214,15 +259,18 @@ export class BasesService {
 
       for (const source of baseBody.sources || []) {
         if (!source.fk_integration_id) {
-          const integration = await Integration.createIntegration({
-            title: source.alias || baseBody.title,
-            type: IntegrationsType.Database,
-            sub_type: source.config?.client,
-            is_private: !!param.req.user?.id,
-            config: source.config,
-            workspaceId: param.req?.ncWorkspaceId,
-            created_by: param.req.user?.id,
-          });
+          const integration = await Integration.createIntegration(
+            {
+              title: source.alias || baseBody.title,
+              type: IntegrationsType.Database,
+              sub_type: source.config?.client,
+              is_private: !!param.req.user?.id,
+              config: source.config,
+              workspaceId: param.req?.ncWorkspaceId,
+              created_by: param.req.user?.id,
+            },
+            ncMeta,
+          );
 
           source.fk_integration_id = integration.id;
           source.config = {
@@ -234,13 +282,14 @@ export class BasesService {
     }
 
     if (baseBody?.title.length > 50) {
+      // Limited for consistent behaviour across identifier names for table, view, columns
       NcError.badRequest('Base title exceeds 50 characters');
     }
 
     baseBody.title = DOMPurify.sanitize(baseBody.title);
     baseBody.slug = baseBody.title;
 
-    const base = await Base.createProject(baseBody);
+    const base = await Base.createProject(baseBody, ncMeta);
 
     const context = {
       workspace_id: base.fk_workspace_id,
@@ -248,22 +297,31 @@ export class BasesService {
     };
 
     // TODO: create n:m instances here
-    await BaseUser.insert(context, {
-      fk_user_id: (param as any).user.id,
-      base_id: base.id,
-      roles: 'owner',
-    });
+    await BaseUser.insert(
+      context,
+      {
+        fk_user_id: (param as any).user.id,
+        base_id: base.id,
+        roles: 'owner',
+      },
+      ncMeta,
+    );
 
     await syncMigration(base);
 
     // populate metadata if existing table
-    for (const source of await base.getSources()) {
+    for (const source of await base.getSources(undefined, ncMeta)) {
       if (process.env.NC_CLOUD !== 'true' && !base.is_meta) {
-        const info = await populateMeta(context, source, base);
+        const info = await populateMeta(context, {
+          source,
+          base,
+          user: param.user,
+        });
 
         this.appHooksService.emit(AppEvents.APIS_CREATED, {
           info,
           req: param.req,
+          context,
         });
 
         source.config = undefined;
@@ -275,20 +333,27 @@ export class BasesService {
       user: param.user,
       xcdb: !baseBody.external,
       req: param.req,
+      context,
     });
 
     return base;
   }
 
-  async createDefaultBase(param: { user: UserType; req: Request }) {
-    const base = await this.baseCreate({
-      base: {
-        title: 'Getting Started',
-        type: 'database',
-      } as any,
-      user: param.user,
-      req: param.req,
-    });
+  async createDefaultBase(
+    param: { user: UserType; req: Request },
+    ncMeta = Noco.ncMeta,
+  ) {
+    const base = await this.baseCreate(
+      {
+        base: {
+          title: 'Getting Started',
+          type: 'database',
+        } as any,
+        user: param.user,
+        req: param.req,
+      },
+      ncMeta,
+    );
 
     const context = {
       workspace_id: base.fk_workspace_id,
@@ -307,6 +372,7 @@ export class BasesService {
         columns,
       },
       user: param.user,
+      req: param.req,
     });
 
     (base as any).tables = [table];

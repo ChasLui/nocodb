@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { Form, message } from 'ant-design-vue'
-import { validateAndExtractSSLProp } from 'nocodb-sdk'
+import { type IntegrationType, validateAndExtractSSLProp } from 'nocodb-sdk'
 import {
   ClientType,
   type DatabricksConnection,
@@ -30,6 +30,8 @@ const { refreshCommandPalette } = useCommandPalette()
 const _projectId = inject(ProjectIdInj, undefined)
 const baseId = computed(() => _projectId?.value ?? base.value?.id)
 
+const filteredIntegrations = computed(() => integrations.value.filter((i) => i.sub_type !== SyncDataType.NOCODB))
+
 const useForm = Form.useForm
 
 const testSuccess = ref(false)
@@ -49,6 +51,8 @@ const { isUIAllowed } = useRoles()
 const creatingSource = ref(false)
 
 const advancedOptionsExpansionPanel = ref<string[]>([])
+
+const isLoading = ref<boolean>(false)
 
 const defaultFormState = (client = ClientType.MYSQL) => {
   return {
@@ -231,8 +235,8 @@ const createSource = async () => {
             emit('sourceCreated')
             vOpen.value = false
             creatingSource.value = false
-          } else if (status === JobStatus.FAILED) {
-            message.error('Failed to create base')
+          } else if (data.status === JobStatus.FAILED) {
+            message.error(data?.data?.error?.message || 'Failed to create base')
             creatingSource.value = false
           }
         }
@@ -314,7 +318,12 @@ watch(
 
 // select and focus title field on load
 onMounted(async () => {
-  await loadIntegrations(true, base.value?.id)
+  isLoading.value = true
+
+  if (!integrations.value.length) {
+    await loadIntegrations(true, base.value?.id)
+  }
+
   formState.value.title = await generateUniqueName()
 
   nextTick(() => {
@@ -325,6 +334,8 @@ onMounted(async () => {
       input?.focus()
     }, 500)
   })
+
+  isLoading.value = false
 })
 
 const allowMetaWrite = computed({
@@ -349,8 +360,8 @@ const allowDataWrite = computed({
 const changeIntegration = (triggerTestConnection = false) => {
   if (formState.value.fk_integration_id && selectedIntegration.value) {
     formState.value.dataSource = {
+      client: selectedIntegration.value.sub_type,
       connection: {
-        client: selectedIntegration.value.sub_type,
         database: selectedIntegrationDb.value,
       },
       searchPath: selectedIntegration.value.config?.searchPath,
@@ -371,7 +382,7 @@ const handleAddNewConnection = () => {
 }
 
 eventBus.on((event, payload) => {
-  if (event === IntegrationStoreEvents.INTEGRATION_ADD && pageMode.value === IntegrationsPageMode.ADD && payload?.id) {
+  if (event === IntegrationStoreEvents.INTEGRATION_ADD && payload?.id) {
     formState.value.fk_integration_id = payload.id
     until(() => selectedIntegration.value?.id === payload.id)
       .toBeTruthy()
@@ -410,6 +421,23 @@ function handleAutoScroll(scroll: boolean, className: string) {
 }
 
 const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [IntegrationCategoryType.DATABASE].includes(c.value)
+const filterIntegration = (i: IntegrationItemType) => i.sub_type !== SyncDataType.NOCODB && i.isAvailable
+
+const isIntgrationDisabled = (integration: IntegrationType = {}) => {
+  switch (integration.sub_type) {
+    case ClientType.SQLITE:
+      return {
+        isDisabled: integration?.source_count && integration.source_count > 0,
+        msg: 'Sqlite support only 1 database per connection',
+      }
+
+    default:
+      return {
+        isDisabled: false,
+        msg: '',
+      }
+  }
+}
 </script>
 
 <template>
@@ -442,10 +470,10 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
               size="small"
               class="nc-extdb-btn-test-connection"
               :class="{ 'pointer-events-none': testSuccess }"
-              :disabled="!selectedIntegration"
+              :disabled="!selectedIntegration || isLoading"
               :loading="testingConnection"
               icon-position="right"
-              @click="testConnection"
+              @click="testConnection()"
             >
               <template #icon>
                 <GeneralIcon v-if="testSuccess" icon="circleCheckSolid" class="!text-green-700 w-4 h-4" />
@@ -461,7 +489,7 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
           <NcButton
             size="small"
             type="primary"
-            :disabled="!testSuccess || !selectedIntegration"
+            :disabled="!testSuccess || !selectedIntegration || isLoading"
             :loading="creatingSource"
             class="nc-extdb-btn-submit"
             @click="createSource"
@@ -474,7 +502,7 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
         </div>
       </div>
       <div class="h-[calc(100%_-_58px)] flex">
-        <div class="nc-add-source-left-panel nc-scrollbar-thin">
+        <div class="nc-add-source-left-panel nc-scrollbar-thin relative">
           <div class="create-source bg-white relative flex flex-col gap-2 w-full max-w-[768px]">
             <a-form
               ref="form"
@@ -507,16 +535,32 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
                           dropdown-match-select-width
                           @change="changeIntegration()"
                         >
-                          <a-select-option v-for="integration in integrations" :key="integration.id" :value="integration.id">
+                          <a-select-option
+                            v-for="integration in filteredIntegrations"
+                            :key="integration.id"
+                            :value="integration.id"
+                            :disabled="isIntgrationDisabled(integration).isDisabled"
+                          >
                             <div class="w-full flex gap-2 items-center" :data-testid="integration.title">
-                              <GeneralBaseLogo
+                              <GeneralIntegrationIcon
                                 v-if="integration?.sub_type"
-                                :source-type="integration.sub_type"
-                                class="flex-none h-4 w-4"
+                                :type="integration.sub_type"
+                                :style="{
+                                  filter: isIntgrationDisabled(integration).isDisabled
+                                    ? 'grayscale(100%) brightness(115%)'
+                                    : undefined,
+                                }"
                               />
-                              <NcTooltip class="flex-1 truncate" show-on-truncate-only>
+                              <NcTooltip
+                                class="flex-1 truncate"
+                                :show-on-truncate-only="!isIntgrationDisabled(integration).isDisabled"
+                              >
                                 <template #title>
-                                  {{ integration.title }}
+                                  {{
+                                    isIntgrationDisabled(integration).isDisabled
+                                      ? isIntgrationDisabled(integration).msg
+                                      : integration.title
+                                  }}
                                 </template>
                                 {{ integration.title }}
                               </NcTooltip>
@@ -534,6 +578,7 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
                             <a-divider style="margin: 4px 0" />
                             <div
                               class="px-1.5 flex items-center text-brand-500 text-sm cursor-pointer"
+                              @mousedown.prevent
                               @click="handleAddNewConnection"
                             >
                               <div class="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-gray-100">
@@ -704,9 +749,18 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
               </div>
             </a-form>
 
-            <WorkspaceIntegrationsTab is-modal :filter-category="filterIntegrationCategory" />
+            <WorkspaceIntegrationsTab
+              is-modal
+              :filter-category="filterIntegrationCategory"
+              :filter-integration="filterIntegration"
+            />
             <WorkspaceIntegrationsEditOrAdd load-datasource-info :base-id="baseId" />
           </div>
+          <general-overlay :model-value="isLoading" inline transition class="!bg-opacity-15">
+            <div class="flex items-center justify-center h-full w-full !bg-white !bg-opacity-85 z-1000">
+              <a-spin size="large" />
+            </div>
+          </general-overlay>
         </div>
         <div class="nc-add-source-right-panel">
           <DashboardSettingsDataSourcesSupportedDocs />
@@ -872,5 +926,9 @@ const filterIntegrationCategory = (c: IntegrationCategoryItemType) => [Integrati
     height: min(calc(100vh - 100px), 1024px);
     max-height: min(calc(100vh - 100px), 1024px) !important;
   }
+}
+
+.nc-dropdown-ext-db-type {
+  @apply !z-1000;
 }
 </style>
